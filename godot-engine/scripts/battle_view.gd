@@ -5,7 +5,7 @@ var font:Font
 var age:float=2.0
 
 func _ready():
- custom_minimum_size=Vector2(430,235)
+ custom_minimum_size=Vector2(430,205)
  mouse_filter=Control.MOUSE_FILTER_IGNORE
  font=SystemFont.new();font.font_names=PackedStringArray(["PingFang SC","Noto Sans CJK SC"])
 
@@ -25,7 +25,9 @@ func bar(at:Vector2,width:float,ratio:float,color:Color):
 func _draw():
  if model==null or font==null:return
  draw_style_box(panel(),Rect2(Vector2.ZERO,size))
- var lane_y:float=size.y*0.52
+ if model.day>=15:
+  for i in range(3):draw_circle(Vector2(size.x-95+i*28,25),10,Color("db9b50"))
+ var lane_y:float=size.y*0.46
  draw_rect(Rect2(8,lane_y-45,size.x-16,98),Color("23313c"))
  for x in range(20,int(size.x),45):draw_line(Vector2(x,lane_y+12),Vector2(x+23,lane_y+12),Color("66717a"),2)
  var car=Rect2(22,lane_y-32,108,65)
@@ -34,17 +36,18 @@ func _draw():
  word(car.position+Vector2(8,28),"房车",19)
  word(Vector2(22,28),"自动作战" if model.phase=="combat" else "公路整备",20)
  bar(Vector2(22,lane_y+45),108,float(model.hull)/model.max_hull,Color("84bd9a"))
- word(Vector2(22,lane_y+76),"耐久 %d/%d"%[model.hull,model.max_hull],14)
+ word(Vector2(22,lane_y+66),"耐久 %d/%d"%[model.hull,model.max_hull],14)
  if model.combat.is_empty():
   word(Vector2(157,lane_y-8),"先配置，再出发",19,Color("e8c583"))
   word(Vector2(157,lane_y+20),"武器自动攻击；弹药必须装车",14)
-  word(Vector2(22,size.y-17),"第5段起持续干旱 · 注意供水与火力的空间竞争",13,Color("9cafbc"))
+  word(Vector2(22,size.y-17),"第15天起三日凌空 · 准备隔热 / 制冷 / 补给",13,Color("9cafbc"))
   return
  var enemies:Array=model.combat.enemies
- var enemy_x:float=size.x-166
+ var enemy_x:float=size.x-196
+ var enemy_y:float=maxf(68,lane_y-enemies.size()*57.0/2.0)
  for i in range(enemies.size()):
   var e:Dictionary=enemies[i]
-  var y:float=58+i*57
+  var y:float=enemy_y+i*57
   var c=Color("a56551") if e.hp>0 else Color("3b454c")
   draw_style_box(vehicle(c),Rect2(enemy_x,y,140,37))
   word(Vector2(enemy_x+7,y+24),e.name,14)
@@ -53,7 +56,7 @@ func _draw():
  word(Vector2(22,50),"第%d拍 · 弹药%d · 电量%d/%d"%[model.combat.tick,model.quantity("ammo"),model.combat.energy,model.combat.max_energy],14,Color("e8c583"))
  if age<0.65:
   for effect in model.effects:
-   var target_y:float=76+maxi(0,int(effect.target))*57
+   var target_y:float=enemy_y+18+maxi(0,int(effect.target))*57
    if effect.type=="shot":
     var start=Vector2(132,lane_y)
     var end=Vector2(enemy_x,target_y)

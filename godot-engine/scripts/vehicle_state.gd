@@ -1,37 +1,68 @@
 extends RefCounted
-## Slice 1, in-memory. All cargo quantities live in physical grid items.
+## Disposable 21-day cycle prototype. Cargo and ingredients always occupy grid cells.
 const CATALOG = {
- "driver":{"name":"驾驶位","size":Vector2i(1,2),"color":"566d85","desc":"固定保留的驾驶位。此片段不模拟乘员。","fixed":true},
- "seat":{"name":"客座","size":Vector2i(1,2),"color":"43576d","desc":"四个座位的占位验证；可搬移，不可丢弃。","fixed":true},
+ "driver":{"name":"驾驶位","size":Vector2i.ONE,"color":"566d85","desc":"占1格，容纳1人。主角默认在此驾驶；移动座位时成员随座位移动。","fixed":true},
+ "seat":{"name":"客座","size":Vector2i.ONE,"color":"43576d","desc":"占1格，容纳1人。开局为空座，不代表已有乘员。可搬移，本轮保留。","fixed":true},
+ "bed":{"name":"单人床","size":Vector2i(1,2),"color":"8f8caa","desc":"占2格，可旋转。每床供1人睡眠；夜间自动安排。无热伤且水粮充足时，有床休息恢复2健康，无床不恢复。"},
  "gun":{"name":"机枪","size":Vector2i(1,2),"color":"bc8352","desc":"每2拍自动射击：消耗1弹药，造成6伤害，受装甲减免。"},
  "cannon":{"name":"穿甲炮","size":Vector2i(2,3),"color":"bb6752","desc":"每4拍自动射击：消耗2弹药，造成16伤害，无视装甲。占6格。"},
- "collector":{"name":"集水器","size":Vector2i(2,2),"color":"368e99","desc":"每段行驶生成2水，先补已有水箱，再尝试空位。装不下会明确报告溢出。"},
- "kitchen":{"name":"厨房","size":Vector2i(2,2),"color":"b59554","desc":"每段行驶消耗1原料，产2口粮；至少有1口粮容量才加工。"},
+ "collector":{"name":"集水器","size":Vector2i(2,2),"color":"368e99","desc":"每天夜间收集1水；三日凌空期间空气干燥，产量为0。"},
+ "kitchen":{"name":"厨房","size":Vector2i(2,2),"color":"b59554","desc":"每晚消耗1原料，产2口粮；没有空间则暂停。"},
  "battery":{"name":"蓄电池","size":Vector2i(1,2),"color":"7e82ba","desc":"每战可用电量+4。基础电容每战3电；此片段整备时由车载电源充满。"},
  "interceptor":{"name":"拦截器","size":Vector2i(1,2),"color":"528fab","desc":"每次敌方攻击自动消耗1电，最多拦截3伤害；本片段只计算一套。"},
  "armor":{"name":"装甲板","size":Vector2i(1,2),"color":"7f929c","desc":"每次受到攻击减伤1；本片段只计算一套。"},
- "water":{"name":"饮水","size":Vector2i(1,2),"color":"397b9b","max":6,"desc":"每箱最多6水。普通路段耗1水，干旱路段耗2水；缺1水损失4耐久。"},
- "food":{"name":"口粮","size":Vector2i(1,2),"color":"8b8551","max":6,"desc":"每箱最多6份。每段行驶耗1份；缺1份损失4耐久。"},
- "fuel":{"name":"燃油","size":Vector2i(1,2),"color":"9f7049","max":8,"desc":"每桶最多8。普通路段耗1，水站绕路耗2；燃油耗尽则本局失败。"},
+ "water":{"name":"饮水","size":Vector2i(1,2),"color":"397b9b","max":12,"desc":"每箱最多12水；夜间按余热耗水，灾难外出另耗1水。缺水损伤乘员健康。"},
+ "food":{"name":"口粮","size":Vector2i(1,2),"color":"8b8551","max":12,"desc":"每箱最多12份。每晚消耗1份；缺粮损伤乘员健康。"},
+ "fuel":{"name":"燃油","size":Vector2i(1,2),"color":"9f7049","max":12,"desc":"每桶最多12。准备期外出1油，灾难期2油；发电制冷每晚1油。无油仍可驻车。"},
  "ammo":{"name":"弹药","size":Vector2i(1,2),"color":"a79364","max":12,"desc":"每箱最多12。机枪每次耗1，穿甲炮每次耗2。点击同类箱可合并堆叠。"},
- "scrap":{"name":"材料","size":Vector2i(2,1),"color":"778577","max":6,"desc":"每箱最多6。水站维修营花6材料扩容一次，也可花2材料修复6耐久。"},
- "raw":{"name":"原料","size":Vector2i(1,2),"color":"698c59","max":6,"desc":"每箱最多6。厨房每段行驶用1份加工2份口粮。"},
+ "scrap":{"name":"金属","size":Vector2i(2,1),"color":"778577","max":8,"desc":"制作与扩容材料，每箱最多8。必须先装车才能使用。"},
+ "raw":{"name":"原料","size":Vector2i(1,2),"color":"698c59","max":6,"desc":"每箱最多6。厨房每晚用1份加工2份口粮。"},
+ "bench":{"name":"制作台","size":Vector2i(2,2),"color":"9c784e","desc":"制作隔热、发电与制冷设备的前提。安装后才生效；占4格。"},
+ "shade":{"name":"隔热层","size":Vector2i(2,2),"color":"bd985e","desc":"被动降低2级热强度，不耗油；只计算一套。占位代表隔热物料与内部支架。"},
+ "generator":{"name":"发电机","size":Vector2i(1,2),"color":"948261","desc":"与制冷机配套，高温夜间耗1油支持制冷；只运行一套。"},
+ "cooler":{"name":"制冷机","size":Vector2i(2,2),"color":"569d9d","desc":"启用时需发电机与1油/晚，降低3级热强度；只计算一套。"},
+ "cloth":{"name":"布料","size":Vector2i(1,2),"color":"a78a78","max":8,"desc":"制作隔热层和设备使用，每箱最多8。"},
+ "electronics":{"name":"元件","size":Vector2i(1,2),"color":"7f89b1","max":8,"desc":"发电机与制冷机的材料，每箱最多8。"},
  "repair":{"name":"修理包","size":Vector2i(1,2),"color":"ac6473","max":2,"desc":"停车时点击使用，消耗1份恢复10耐久。每箱最多2。"}
 }
-const NODE_NAMES = ["启程","路边车库","兽群","预警信号","维修营","补给残骸","最后整备","出口守卫"]
+const RECIPES = {
+ "bench":{"cost":{"scrap":2},"bench":false},
+ "bed":{"cost":{"scrap":2,"cloth":2},"bench":false},
+ "shade":{"cost":{"scrap":2,"cloth":4},"bench":true},
+ "generator":{"cost":{"scrap":3,"electronics":2},"bench":true},
+ "cooler":{"cost":{"scrap":2,"electronics":2,"cloth":1},"bench":true},
+ "armor":{"cost":{"scrap":3},"bench":true},
+ "repair":{"cost":{"scrap":2,"cloth":1},"bench":true}
+}
+const HEAT = [3,3,4,5,5,4,3]
+const ROUTES = {
+ "supply":{"name":"生活补给线","hint":"水6 / 粮4 / 油3；准备期安全，灾难期遭遇热兽。","loot":[["water",6],["food",4],["fuel",3]]},
+ "salvage":{"name":"废车拆解线","hint":"金属4 / 布料3 / 弹药4；自动击退掠食兽。","loot":[["scrap",4],["cloth",3],["ammo",4]]},
+ "tech":{"name":"电站遗址线","hint":"元件3 / 金属2 / 油4；遭遇守卫，首次学会发电机与制冷机图纸。","loot":[["electronics",3],["scrap",2],["fuel",4]]},
+ "arms":{"name":"武装物资箱","hint":"弹药10 / 修理包1 / 布料2；装甲守卫，先战斗再开箱。","loot":[["ammo",10],["repair",1],["cloth",2]]}
+}
 var width:int=4
 var height:int=6
 var floor_index:int=0
 var items:Array=[]
 var next_id:int=1
 var logs:Array[String]=[]
-var node:int=0
+var day:int=1
+var actions:int=2
+var explored:bool=false
+var members:Array=[]
+var health:int=60
+var max_health:int=60
+var cooling_enabled:bool=true
+var learned:Array[String]=["bench","bed","shade","armor","repair"]
+var pending_route:String=""
+var day_reports:Array[String]=[]
 var variant:int=0
 var phase:String="stop"
 var hull:int=40
 var max_hull:int=40
 var route:String=""
-var expanded:bool=false
+var expansion_level:int=0
 var choice_done:bool=false
 var outcome:String=""
 var won:bool=false
@@ -43,17 +74,21 @@ var last_report:String=""
 
 func _init(run_variant:int=0):
  variant=run_variant%2
- add_item("driver",1,0,Vector2i(0,0))
+ var driver_id:int=add_item("driver",1,0,Vector2i(0,0))
  for x in range(1,4):add_item("seat",1,0,Vector2i(x,0))
  add_item("gun",1,0,Vector2i(0,2))
  add_item("ammo",10,0,Vector2i(1,2))
- add_item("water",4,0,Vector2i(2,2))
- add_item("food",4,0,Vector2i(3,2))
+ add_item("water",6,0,Vector2i(2,2))
+ add_item("food",6,0,Vector2i(3,2))
  add_item("fuel",8,0,Vector2i(0,4))
  add_item("scrap",4,0,Vector2i(1,4))
+ var bed_id:int=add_item("bed",1,0,Vector2i(0,1))
+ item_by_id(bed_id).rotated=true
+ members=[{"id":1,"name":"主角","seat_id":driver_id}]
  choice_done=true
- note("任务：穿过7段公路，击败出口守卫。所有物资必须装进车内。")
- note("路线样本%s：无局外成长。整理时不推进时间。"%["A","B"][variant])
+ note("目标：第1～14天准备，活过第15～21天的三日凌空。")
+ note("每天2行动，最多外出1次。制作/扩容各耗1行动；摆放免费。结束当天才结算生存消耗。")
+ note("先造制作台→装车→拆解取材→扩容。隔热图纸已学会；电站路线保证提供能源图纸。")
 
 func add_item(kind:String,amount:int=1,floor_id:int=-1,pos:Vector2i=Vector2i.ZERO)->int:
  var id:int=next_id;next_id+=1
@@ -68,6 +103,26 @@ func item_by_id(id:int)->Dictionary:
 func footprint(item:Dictionary)->Vector2i:
  var s:Vector2i=CATALOG[item.kind].size
  return Vector2i(s.y,s.x) if item.rotated else s
+
+func seat_occupant(id:int)->String:
+ for member in members:
+  if member.seat_id==id:return member.name
+ return ""
+
+func rest_assignments()->Array:
+ var beds:Array=items.filter(func(item):return item.floor==0 and item.kind=="bed")
+ var assignments:Array=[]
+ for i in range(mini(members.size(),beds.size())):
+  assignments.append({"member":members[i].name,"bed_id":beds[i].id})
+ return assignments
+
+func bed_occupant(id:int)->String:
+ for assignment in rest_assignments():
+  if assignment.bed_id==id:return assignment.member
+ return ""
+
+func rest_recovery()->int:
+ return 2 if not members.is_empty() and rest_assignments().size()==members.size() else 0
 
 func count_active(kind:String)->int:
  var n:int=0
@@ -159,91 +214,153 @@ func use_repair(id:int)->bool:
  var gain:int=mini(10,max_hull-hull);hull+=gain;note("使用修理包：耐久+%d"%gain)
  return true
 
-func upgrade()->bool:
- if not editable() or node!=4 or expanded:return false
- if not spend("scrap",6):note("扩容需要车内6材料；地面材料须先装车");return false
- height=8;expanded=true
- note("扩容完成：4×6 → 4×8，增加8格。原布局保持不变。")
- return true
+func heat_on(d:int)->int:
+ return HEAT[d-15] if d>=15 and d<=21 else 0
 
-func workshop_repair()->bool:
- if not editable() or node!=4 or hull>=max_hull:return false
- if not spend("scrap",2):note("维修需要车内2材料");return false
- hull=mini(max_hull,hull+6);note("维修营：花2材料，恢复最多6耐久");return true
+func discard_loose():
+ for item in ground():metrics.discarded+=item.amount;items.erase(item)
 
-func offers()->Array:
- if not editable() or choice_done:return []
- match node:
-  1:
-   return [{"title":"集水器 · 2×2","hint":"之后每段生成2水；供给占4格。","bundle":[["collector",1]]},
-    {"title":"穿甲炮 · 2×3","hint":"每4拍16穿甲伤害，但一次消耗2弹药。","bundle":[["cannon",1]]},
-    {"title":"防护补给","hint":"装甲板1×2 + 修理包1×2，先保住车体。","bundle":[["armor",1],["repair",1]]}]
-  3:
-   return [{"title":"拦截器 · 1×2","hint":"每次用1电拦截3伤害；基础电容3电/战。","bundle":[["interceptor",1]]},
-    {"title":"蓄电池与弹药","hint":"电量+4（需拦截器发挥作用）；弹药补6。","bundle":[["battery",1],["ammo",6]]},
-    {"title":"弹药与修理包","hint":"补8弹药 + 修理包1份。","bundle":[["ammo",8],["repair",1]]}]
-  5:
-   return [{"title":"厨房与原料","hint":"厨房2×2 + 原料1×2（3份）；之后每段原料转口粮。","bundle":[["kitchen",1],["raw",3]]},
-    {"title":"装甲与弹药" if variant==0 else "能源防护组合","hint":"装甲板1×2 + 8弹药。" if variant==0 else "拦截器1×2 + 蓄电池1×2 + 6弹药。","bundle":[["armor",1],["ammo",8]] if variant==0 else [["interceptor",1],["battery",1],["ammo",6]]},
-    {"title":"轻装补给","hint":"6水 + 4口粮 + 6弹药；每类物资一箱。","bundle":[["water",6],["food",4],["ammo",6]]}]
-  6:
-   return [{"title":"终点弹药包","hint":"12弹药 + 2口粮；为出口守卫留出货位。","bundle":[["ammo",12],["food",2]]},
-    {"title":"生存包","hint":"6水 + 2口粮 + 修理包1份。","bundle":[["water",6],["food",2],["repair",1]]},
-    {"title":"维修与弹药","hint":"8弹药 + 修理包1份。","bundle":[["ammo",8],["repair",1]]}]
- return []
-
-func choose_reward(index:int)->bool:
- var choices:Array=offers()
- if index<0 or index>=choices.size():return false
- var choice:Dictionary=choices[index]
- for pair in choice.bundle:add_item(pair[0],pair[1])
- choice_done=true;note("选择奖励：%s。物资在地面，装车后才生效。"%choice.title)
- return true
-
-func choose_route(value:String)->bool:
- if not editable() or node!=3 or value not in ["short","water"]:return false
- route=value
- note("已选%s：下段耗%d油；敌情与奖励已在路线说明中显示。"%["干河床" if route=="short" else "旧水站",1 if route=="short" else 2])
- return true
-
-func travel_cost()->Dictionary:
- return {"fuel":2 if node==3 and route=="water" else 1,"water":2 if node>=4 or (node==3 and route=="short") else 1,"food":1}
-
-func departure_error()->String:
- if not editable():return "当前不能出发"
- if not choice_done:return "先选择本节点的一组奖励"
- if node==3 and route.is_empty():return "先选择接下来的路线"
- if node>=7:return "已到终点"
+func recipe_error(kind:String)->String:
+ if not editable():return "当前无法制作"
+ if actions<=0:return "今天行动已用完"
+ if not RECIPES.has(kind):return "未知配方"
+ if kind not in learned:return "尚未学会：探索电站遗址可保证获得图纸"
+ if RECIPES[kind].bench and count_active("bench")==0:return "需要先把制作台装进车厢"
+ for ingredient in RECIPES[kind].cost:
+  if quantity(ingredient)<RECIPES[kind].cost[ingredient]:return "车内%s不足"%CATALOG[ingredient].name
  return ""
 
-func depart(discard_ground:bool=false)->bool:
- var error:String=departure_error()
+func craft(kind:String)->bool:
+ var error:String=recipe_error(kind)
  if not error.is_empty():note(error);return false
- if not ground().is_empty() and not discard_ground:note("地面还有物品：装车或确认丢弃后出发");return false
- var cost:Dictionary=travel_cost()
- if quantity("fuel")<cost.fuel:
-  lose("燃油不足：未能抵达下一节点。下次为行驶保留燃油货位。")
-  return true
- for item in ground():
-  metrics.discarded+=item.amount;items.erase(item)
- spend("fuel",cost.fuel)
+ for ingredient in RECIPES[kind].cost:spend(ingredient,RECIPES[kind].cost[ingredient])
+ actions-=1
+ add_item(kind)
+ note("制作完成：%s，已放在地面。请装车才会生效；消耗1行动。"%CATALOG[kind].name)
+ return true
+
+func upgrade()->bool:
+ if not editable() or actions<=0 or expansion_level>=2:return false
+ if count_active("bench")==0:note("扩容需要车内制作台");return false
+ var cost:int=6+2*expansion_level
+ if not spend("scrap",cost):note("扩容需要车内%d金属"%cost);return false
+ height+=2;expansion_level+=1;actions-=1
+ note("车厢扩容到4×%d；增加8格，消耗1行动。"%height)
+ return true
+
+func outing_error(value:String)->String:
+ if not editable():return "当前无法外出"
+ if not ROUTES.has(value):return "请选择路线"
+ if members.is_empty():return "没有驾驶成员"
+ var driver:Dictionary=item_by_id(members[0].seat_id)
+ if driver.is_empty() or driver.floor!=0 or driver.kind!="driver":return "主角需要坐在驾驶位上才能出发"
+ if explored:return "今天已外出；整理、制作或结束当天"
+ if actions<=0:return "今天行动已用完"
+ if quantity("fuel")<(2 if day>=15 else 1):return "燃油不足，可驻车或先整理地面物资"
+ if day>=15 and quantity("water")<1:return "高温外出至少需要1水，可先整理地面物资"
+ return ""
+
+func explore(value:String,discard_ground:bool=false)->bool:
+ # Synchronous entry point for simulation; the UI presents the journey in stages.
+ if not begin_journey(value,discard_ground):return false
+ arrive()
+ if phase=="encounter":collect_encounter()
+ return true
+
+func begin_journey(value:String,discard_ground:bool=false)->bool:
+ var error:String=outing_error(value)
+ if not error.is_empty():note(error);return false
+ if not ground().is_empty() and not discard_ground:note("外出将放弃地面物资，请先装车或确认");return false
+ discard_loose()
+ actions-=1;explored=true;pending_route=value
+ spend("fuel",2 if day>=15 else 1)
+ if day>=15:
+  spend("water",1);health=maxi(0,health-2)
+  note("高温外出：额外耗1油、1水，乘员暴晒健康-2；敌人更强。")
+ if health<=0:lose("乘员在高温外出时倒下");return true
+ note("外出：%s，消耗1行动。"%ROUTES[value].name)
+ combat={};effects=[];phase="travel"
+ return true
+
+func arrive():
+ if phase!="travel":return
+ if pending_route=="supply" and day<15:phase="encounter"
+ else:start_battle("heavy" if pending_route=="arms" else "swarm")
+
+func collect_encounter()->bool:
+ if phase!="encounter":return false
+ phase="stop";grant_loot()
+ return true
+
+func grant_loot():
+ var chosen:Dictionary=ROUTES[pending_route]
+ for pair in chosen.loot:add_item(pair[0],pair[1])
+ if pending_route=="tech" and "cooler" not in learned:
+  learned.append("generator");learned.append("cooler")
+  note("学会图纸：发电机、制冷机。图纸收录配方册，不占车格。")
+ note("打开%s物资箱：战利品在地面，装车后可使用。"%chosen.name)
+ pending_route=""
+
+func night_plan(d:int,available_fuel:int)->Dictionary:
+ var heat:int=heat_on(d)
+ var shade:int=2 if count_active("shade")>0 else 0
+ var powered:bool=heat>0 and cooling_enabled and count_active("cooler")>0 and count_active("generator")>0 and available_fuel>0
+ var residual:int=maxi(0,heat-shade-(3 if powered else 0))
+ return {"heat":heat,"residual":residual,"water":1+ceili(residual/2.0),"food":1,"fuel":1 if powered else 0,"damage":residual*4,"powered":powered}
+
+func forecast()->Dictionary:
+ # Intentionally assumes no future exploration, production or changes in layout.
+ var result={"water":0,"food":0,"fuel":0,"damage":0,"from":maxi(15,day),"cooling_nights":0}
+ var oil:int=quantity("fuel")
+ var water:int=quantity("water")
+ var food:int=quantity("food")
+ var projected:int=health
+ for d in range(maxi(15,day),22):
+  var plan:Dictionary=night_plan(d,oil)
+  oil-=int(plan.fuel)
+  for kind in ["water","food","fuel","damage"]:result[kind]+=int(plan[kind])
+  if plan.powered:result.cooling_nights+=1
+  var loss:int=int(plan.damage)+maxi(0,int(plan.water)-water)*6+maxi(0,1-food)*4
+  water=maxi(0,water-int(plan.water));food=maxi(0,food-1)
+  if projected>0:projected=maxi(0,mini(max_health,projected-loss+(rest_recovery() if loss==0 else 0)))
+ result.water_gap=maxi(0,int(result.water)-quantity("water"))
+ result.food_gap=maxi(0,int(result.food)-quantity("food"))
+ result.health_loss=maxi(0,health-projected)
+ result.projected_health=projected
+ return result
+
+func departure_error()->String:
+ return "当前无法结束当天" if not editable() else ""
+
+func depart(discard_ground:bool=false)->bool:
+ # Kept as the UI's end-day entrypoint; one settlement only, never per rearrangement.
+ if not editable():return false
+ if not ground().is_empty() and not discard_ground:note("结束当天将离开停靠点，请先装车或确认放弃地面物资");return false
+ discard_loose()
  produce()
+ var plan:Dictionary=night_plan(day,quantity("fuel"))
+ spend("fuel",plan.fuel)
+ var loss:int=plan.damage
+ var shortages:PackedStringArray=[]
  for kind in ["water","food"]:
-  var available:int=mini(quantity(kind),cost[kind])
-  spend(kind,available)
-  var shortage:int=int(cost[kind])-available
-  if shortage>0:
-   hull-=shortage*4;metrics.damage+=shortage*4
-   note("%s短缺%d：耐久-%d"%[CATALOG[kind].name,shortage,shortage*4])
- note("行驶消耗：%d燃油 / %d水 / 1口粮"%[cost.fuel,cost.water])
- node+=1;choice_done=false
- if hull<=0:lose("途中补给耗尽，车辆无法继续。查看记录中的短缺原因。");return true
- match node:
-  2:start_battle("swarm")
-  4:start_battle("heavy" if route=="short" else "swarm")
-  7:start_battle("boss")
-  _:phase="stop"
- note("抵达：%s"%NODE_NAMES[node])
+  var paid:int=mini(quantity(kind),int(plan[kind]))
+  spend(kind,paid)
+  var missing:int=int(plan[kind])-paid
+  if missing>0:
+   loss+=missing*(6 if kind=="water" else 4)
+   shortages.append("缺%s%d"%[CATALOG[kind].name,missing])
+ var recovered:int=mini(rest_recovery(),maxi(0,max_health-health)) if loss==0 else 0
+ health=maxi(0,mini(max_health,health-loss+recovered))
+ var summary:String="第%d天：耗水%d / 粮1 / 制冷油%d；余热%d，热伤%d，健康损失%d%s"%[day,plan.water,plan.fuel,plan.residual,plan.damage,loss,"；"+"、".join(shortages) if not shortages.is_empty() else ""]
+ var resting:Array=rest_assignments()
+ summary+="；%s，休息恢复%d"%["主角在单人床休息" if not resting.is_empty() else "没有可用床位",recovered]
+ day_reports.append(summary);note(summary);last_report=summary
+ if health<=0:lose("乘员无法继续："+summary);return true
+ if day==21:
+  won=true;phase="ended";outcome="挺过三日凌空！第一个21天周期完成。"
+  note(outcome);return true
+ day+=1;actions=2;explored=false;combat={};effects=[]
+ note("第%d天 / %s：%s"%[day,"准备期" if day<=14 else "炎热地狱","距离灾难%d天"%(15-day) if day<=14 else "仍可外出，但多耗1油/1水，暴晒健康-2"])
  return true
 
 func store_generated(kind:String,amount:int)->int:
@@ -282,7 +399,7 @@ func cargo_has_room(kind:String)->bool:
 
 func produce():
  if count_active("collector")>0:
-  var expected:int=2*count_active("collector")
+  var expected:int=1 if day<15 else 0
   var actual:int=store_generated("water",expected);metrics.produced+=actual
   note("集水器：产%d水，入舱%d，容量不足溢出%d"%[expected,actual,expected-actual])
  if count_active("kitchen")>0:
@@ -300,8 +417,8 @@ func start_battle(kind:String):
  phase="combat"
  var enemies:Array=[]
  if kind=="swarm":
-  for i in range(3):enemies.append(enemy("掠食兽 %d"%(i+1),8+(2 if variant==1 else 0),0,2,3+i))
- elif kind=="heavy":enemies.append(enemy("装甲拦路车",30,2,5,3))
+  enemies.append(enemy("热浪掠食兽" if day>=15 else "公路掠食兽",18 if day>=15 else 12,0,3 if day>=15 else 2,3))
+ elif kind=="heavy":enemies.append(enemy("装甲物资守卫",30 if day>=15 else 24,1,4 if day>=15 else 3,3))
  else:
   enemies.append(enemy("出口装甲守卫",48,2,5,3))
   enemies.append(enemy("护卫无人机",10,0,2,4))
@@ -368,36 +485,23 @@ func report_battle()->String:
  return "耗弹 %d · 拦截/减伤 %d · 车损 %d\n%s"%[combat.ammo,combat.blocked,combat.damage," / ".join(contribution)]
 
 func record_battle():
- last_report=report_battle();battle_reports.append("%s：%s"%[NODE_NAMES[node],last_report])
+ last_report=report_battle();battle_reports.append("第%d天：%s"%[day,last_report])
  for key in ["shots","ammo","blocked","damage"]:metrics[key]+=combat[key]
 
 func end_battle():
- record_battle();phase="stop";choice_done=true
+ record_battle();phase="stop"
  note("战斗胜利。"+last_report.replace("\n","；"))
- if node==2:
-  add_item("ammo",8 if variant==0 else 6);add_item("scrap",2)
- elif node==4:
-  add_item("scrap",4);add_item("food",2);add_item("water",6 if route=="water" else 4)
-  note("抵达维修营：可以花6材料扩容，或花2材料维修；补给已卸在地面。")
- elif node==7:
-  won=true;phase="ended";outcome="抵达下一世界"
-  note("通关！这趟旅程的车辆与物资不带入下一局。可以用另一组掉落再试。")
+ grant_loot()
 
 func lose(reason:String):
  if phase=="combat":record_battle()
  phase="ended";hull=maxi(0,hull);outcome="旅程结束："+reason;note(outcome)
 
 func description()->String:
- if not outcome.is_empty():return outcome+"\n本局摆放%d次 / 放弃%d份 / 生产入舱%d份。"%[metrics.placed,metrics.discarded,metrics.produced]
- match node:
-  0:return "你有一辆4×6小车，前方是7段公路。第5段起耗水翻倍。先检查车内物资，再出发寻找设备。每段行驶推进一次生产与消耗；整理不耗时。"
-  1:return "车库只能带走一组奖励。先选奖励，再把地面物品放进车厢。穿甲炮很大，集水器则能减轻后半程的饮水压力。"
-  2:return "兽群正在逼近。" if phase=="combat" else "第一次战斗结束。检查耗弹与车损，把掉落装车；同类物资点击现有箱子可合并，超出上限仍留原处。"
-  3:return "预警：维修营之后持续干旱（每段耗2水）。干河床：1油/2水，装甲车，营地得4水；旧水站：2油/1水，兽群，营地得6水。两路都抵达同一维修营。"
-  4:return "接近维修营，必须突破阻拦。" if phase=="combat" else "安全停靠。6材料扩成4×8；2材料修复6耐久。扩容与维修使用车内材料，地面物资请先装入或合并。后续每段耗2水。"
-  5:return "残骸里有三组物资。现在的供给能否撑到终点？生产、火力和现成补给只能优先选一组。"
-  6:return "最后整备：下一段耗1油、2水、1口粮。终点为48生命/2装甲的守卫和10生命无人机。检查弹药、耐久与防护；缺补给每份损失4耐久。"
-  _:return "出口守卫：普通武器受装甲减免，穿甲炮无视装甲。先击破装甲车，再清理无人机。"
+ if not outcome.is_empty():return outcome+"\n剩余健康%d / 车体%d；外出战斗%d次。"%[health,hull,battle_reports.size()]
+ var p:Dictionary=night_plan(day,quantity("fuel"))
+ if phase=="combat":return "小爱正在自动战斗，胜利后开箱。战斗锁定布局；可暂停观察火力、弹药和车损。"
+ return "第%d天 · 今日剩余%d行动 / 外出%s\n今晚：热强度%d → 防护后%d；需%d水、1粮、%d制冷油，热伤%d。%s"%[day,actions,"已用" if explored else "可用",p.heat,p.residual,p.water,p.fuel,p.damage,"先制作并装入制作台；拆解线取材可扩容。" if count_active("bench")==0 and day<=3 else "制作与扩容各1行动，整理免费；夜间生存消耗无法跳过。"]
 
 func note(message:String):
  logs.push_front(message)

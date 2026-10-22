@@ -1,0 +1,41 @@
+extends SceneTree
+const Model=preload("res://scripts/vehicle_state.gd")
+var failures:int=0
+func check(ok:bool,why:String):
+ if not ok:failures+=1;push_error(why)
+func _initialize():
+ var m=Model.new()
+ check(m.members.size()==1,"exactly one starting member")
+ check(m.seat_occupant(1)=="主角","protagonist has driver seat")
+ check(m.used_cells()==18,"one-cell seats and two-cell bed occupy 18 of 24 cells with starter cargo")
+ for id in [1,2,3,4]:
+  check(m.footprint(m.item_by_id(id))==Vector2i.ONE,"seat occupies one cell")
+  if id>1:check(m.seat_occupant(id).is_empty(),"three empty seats are not three members")
+ var bed:Dictionary=m.item_by_id(11)
+ check(bed.kind=="bed" and m.footprint(bed)==Vector2i(2,1),"starter bed rotated horizontally, occupies two cells")
+ check(m.place(1,0,Vector2i(2,1),false),"occupied driver seat can be moved")
+ check(m.seat_occupant(1)=="主角","seat assignment follows item identity")
+ check(not m.drop(1),"occupied driving seat remains installed")
+ check(m.rest_assignments().size()==1 and m.bed_occupant(11)=="主角","one member assigned to bed at night")
+ m.members.append({"id":2,"name":"容量测试成员","seat_id":2})
+ check(m.rest_assignments().size()==1,"one bed cannot sleep two members")
+ m.members.pop_back()
+ m.health=50;m.depart()
+ check(m.health==52 and m.day_reports[-1].contains("主角在单人床休息"),"safe night with bed restores health and reports sleep")
+ m=Model.new();m.depart()
+ check(m.health==60 and m.day_reports[-1].contains("休息恢复0"),"full health reports zero actual recovery")
+ m=Model.new();m.health=59;m.depart()
+ check(m.health==60 and m.day_reports[-1].contains("休息恢复1"),"recovery report respects health cap")
+ m=Model.new();m.health=50;m.drop(11)
+ check(m.rest_recovery()==0 and m.rest_assignments().is_empty(),"bed on ground cannot provide sleep")
+ m.depart(true)
+ check(m.health==50 and m.day_reports[-1].contains("没有可用床位"),"without bed, no restorative sleep")
+ m=Model.new();m.health=50;m.spend("water",6);m.depart()
+ check(m.health==44,"bed does not heal through water shortage")
+ m=Model.new();m.members[0].seat_id=2
+ check(not m.begin_journey("supply") and m.actions==2 and m.quantity("fuel")==8,"driving requires occupied driver seat and failed departure does not charge")
+ m=Model.new();m.add_item("cloth",2,0,Vector2i(2,1));m.item_by_id(m.next_id-1).rotated=true
+ check(m.craft("bed"),"replacement bed can be crafted without a workbench")
+ check(m.ground().size()==1 and m.ground()[0].kind=="bed","crafted bed is physical two-cell cargo")
+ print("CREW RULES failures=",failures)
+ quit(1 if failures else 0)

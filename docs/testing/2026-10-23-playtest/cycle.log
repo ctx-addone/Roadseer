@@ -1,0 +1,11 @@
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+
+PREP power=false health=60 hull=29 forecast={ "water": 16, "food": 7, "fuel": 0, "damage": 52, "from": 15, "cooling_nights": 0, &"water_gap": 0, &"food_gap": 0, &"health_loss": 52, &"projected_health": 8 }
+RESULT powered=false day=21 health=8 hull=29 挺过三日凌空！第一个21天周期完成。
+PREP power=true health=60 hull=29 forecast={ "water": 11, "food": 7, "fuel": 7, "damage": 24, "from": 15, "cooling_nights": 7, &"water_gap": 0, &"food_gap": 0, &"health_loss": 22, &"projected_health": 38 }
+RESULT powered=true day=21 health=38 hull=29 挺过三日凌空！第一个21天周期完成。
+PREP power=true health=60 hull=29 forecast={ "water": 11, "food": 7, "fuel": 7, "damage": 24, "from": 15, "cooling_nights": 7, &"water_gap": 0, &"food_gap": 0, &"health_loss": 22, &"projected_health": 38 }
+RESULT powered=true day=15 health=60 hull=29 
+PREP power=true health=60 hull=29 forecast={ "water": 11, "food": 7, "fuel": 7, "damage": 24, "from": 15, "cooling_nights": 7, &"water_gap": 0, &"food_gap": 0, &"health_loss": 22, &"projected_health": 38 }
+RESULT powered=true day=15 health=60 hull=29 
+CYCLE VERIFICATION failures=0

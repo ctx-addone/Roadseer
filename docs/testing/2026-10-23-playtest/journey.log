@@ -1,0 +1,9 @@
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+
+PREP power=true health=60 hull=29 forecast={ "water": 11, "food": 7, "fuel": 7, "damage": 24, "from": 15, "cooling_nights": 7, &"water_gap": 0, &"food_gap": 0, &"health_loss": 22, &"projected_health": 38 }
+RESULT powered=true day=15 health=60 hull=29 
+SLEEP FORECAST bed=true predicted=38 actual=38
+PREP power=true health=60 hull=29 forecast={ "water": 11, "food": 7, "fuel": 7, "damage": 24, "from": 15, "cooling_nights": 7, &"water_gap": 0, &"food_gap": 0, &"health_loss": 22, &"projected_health": 38 }
+RESULT powered=true day=15 health=60 hull=29 
+SLEEP FORECAST bed=false predicted=36 actual=36
+JOURNEY ACCEPTANCE failures=0
