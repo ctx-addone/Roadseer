@@ -1,7 +1,7 @@
 ; Roadseer PC backpack prototype — Godot 4.6
 config_version=5
 [application]
-config/name="Roadseer · 三日凌空 · A布局"
+config/name="Roadseer · 里程与宝箱试玩"
 run/main_scene="res://scenes/main.tscn"
 [display]
 window/size/viewport_width=1440

@@ -8,23 +8,22 @@ var font:Font
 var paused:bool=false
 var reduced_motion:bool=false
 var speed:int=1
-var progress:float=0.0
-var preview_route:String=""
+var pickup_flash:float=0.0
 var last_route:String=""
 var age:float=2.0
 var scroll:float=0.0
 var encounter_rect:Rect2
 const PALE=Color("e7e6ce")
 const GOLD=Color("e0be7d")
-const ROUTE_NAMES={"supply":"路边物资箱","salvage":"破损车辆","tech":"电站遗址","arms":"武装物资车"}
+const ROUTE_NAMES={"supply":"生活补给点","salvage":"破损车辆","tech":"电站遗址","arms":"武装物资车"}
 
 func _ready():
  custom_minimum_size=Vector2(280,320)
  clip_contents=true
  mouse_default_cursor_shape=Control.CURSOR_POINTING_HAND
  font=SystemFont.new();font.font_names=PackedStringArray(["PingFang SC","Noto Sans CJK SC"])
- for key in ROUTE_NAMES:
-  var sign=Button.new();sign.name="Route_"+key;sign.mouse_default_cursor_shape=Control.CURSOR_POINTING_HAND
+ for key in ["explore","skip"]:
+  var sign=Button.new();sign.name="Site_"+key;sign.mouse_default_cursor_shape=Control.CURSOR_POINTING_HAND
   sign.add_theme_font_size_override("font_size",14)
   sign.pressed.connect(func():route_chosen.emit(key))
   add_child(sign);route_buttons[key]=sign
@@ -33,34 +32,24 @@ func _ready():
 
 func _process(delta:float):
  if not paused:age+=delta*speed
- if model!=null and not paused and not reduced_motion and model.phase in ["travel","combat"]:
-  scroll=fmod(scroll+delta*speed*(90 if model.phase=="travel" else 20),1200)
+ pickup_flash=maxf(0,pickup_flash-delta)
+ if model!=null and not reduced_motion:
+  # Position follows simulation distance, independent of frame rate and playback speed.
+  scroll=fmod(model.distance_km*45,1200)
  queue_redraw()
 
 func choosing_route()->bool:
- return model!=null and model.editable() and not model.explored
-
-func route_rect(index:int)->Rect2:
- var sign_height:float=clampf((size.y*0.65-70)/2,64,90)
- var sign_width:float=(size.x-36)/2
- return Rect2(Vector2(12+(index%2)*(sign_width+12),52+(index/2)*(sign_height+16)),Vector2(sign_width,sign_height))
+ return model!=null and model.phase=="landmark"
 
 func sync_routes():
- var summaries={"supply":"水 / 粮 / 油","salvage":"金属 / 布料 / 弹药","tech":"元件 / 能源图纸","arms":"弹药 / 修理包"}
  var i:int=0
  for key in route_buttons:
   var sign:Button=route_buttons[key]
   sign.visible=choosing_route()
-  var rect:Rect2=route_rect(i);sign.position=rect.position;sign.size=rect.size;i+=1
-  var selected:bool=preview_route==key
-  var risk:String="安全" if key=="supply" and model.day<15 else "强敌" if key=="arms" else "战斗"
-  sign.text=("✓ " if selected else "")+ROUTE_NAMES[key]+"\n"+summaries[key]+" · "+risk
-  sign.tooltip_text=model.ROUTES[key].hint+"\n点击选择，在道路下方确认出发"
-  for state in ["normal","hover","pressed","focus"]:
-   var style=StyleBoxFlat.new();style.bg_color=Color("3f5140") if selected or state=="hover" else Color("1c3127")
-   style.border_color=GOLD if selected or state=="focus" else Color("71836b");style.set_border_width_all(2 if selected else 1);style.set_corner_radius_all(7)
-   sign.add_theme_stylebox_override(state,style)
-  sign.add_theme_color_override("font_color",GOLD if selected else PALE)
+  sign.position=Vector2(12,54+i*48);sign.size=Vector2(size.x-24,40);i+=1
+  sign.text="停车探索 · 1小时" if key=="explore" else "略过地点 · 继续赶路 →"
+  sign.disabled=key=="explore" and not model.site_error().is_empty()
+  sign.tooltip_text=model.site_error() if key=="explore" else "保持当前里程，不消耗探索时间"
  queue_redraw()
 
 func pulse():age=0;queue_redraw()
@@ -155,19 +144,21 @@ func _draw():
  for x in [cx-rw/2-16,cx+rw/2+16]:
   draw_line(Vector2(x,0),Vector2(x,h),Color("687260"),2)
   for i in range(-1,int(h/70)+2):draw_circle(Vector2(x,i*70+fmod(scroll,70)),2,Color("aaa98c"))
- var active:String=preview_route if not preview_route.is_empty() and not model.explored else last_route
- var route_name:String=ROUTE_NAMES.get(active,"前方岔路")
- var event_y:float=h*0.33
- if model.phase=="travel":event_y=lerpf(h*0.1,h*0.34,progress)
- var ep=Vector2(cx,event_y)
- var pp=Vector2(cx,h*(0.81 if choosing_route() else 0.77))
+ var active:String=model.pending_route if not model.pending_route.is_empty() else last_route
+ var route_name:String=ROUTE_NAMES.get(active,"")
+ var ep=Vector2(cx,h*0.43)
+ var pp=Vector2(cx,h*0.79)
  encounter_rect=Rect2(ep-Vector2(75,60),Vector2(150,120))
- if choosing_route():
-  for index in range(route_buttons.size()):
-   var rect:Rect2=route_rect(index)
-   var path=PackedVector2Array([pp-Vector2(0,50),Vector2(cx,rect.end.y+17),Vector2(rect.get_center().x,rect.end.y)])
-   var selected:bool=preview_route==route_buttons.keys()[index]
-   draw_polyline(path,Color("7e886a") if selected else Color("4e604d"),5 if selected else 3,true)
+ if model.phase in ["travel","stop"]:
+  var cache_distance:float=maxf(0,model.next_cache*20.0-model.distance_km)
+  var site_distance:float=maxf(0,model.next_site*60.0-model.distance_km)
+  var cache_pos=Vector2(cx-rw*0.24,lerpf(h*0.70,h*0.22,clampf(cache_distance/60.0,0,1)))
+  var site_pos=Vector2(w*0.79,lerpf(h*0.65,h*0.25,clampf(site_distance/60.0,0,1)))
+  crate(cache_pos)
+  tag(cache_pos-Vector2(0,32),"宝箱 %.0fkm"%cache_distance)
+  plate(Rect2(site_pos-Vector2(22,17),Vector2(44,34)),Color("526c5a"),4,GOLD)
+  word(site_pos-Vector2(12,-5),"P",22,GOLD)
+  tag(site_pos-Vector2(0,29),"地点 %.0fkm"%site_distance)
  elif model.phase=="combat" and not model.combat.is_empty():
   var enemies:Array=model.combat.enemies
   for i in range(enemies.size()):
@@ -177,19 +168,14 @@ func _draw():
    tag(p-Vector2(0,54),e.name,Color("e5b298"))
    bar(p+Vector2(-42,43),84,float(e.hp)/e.max_hp,Color("d79170"))
    word(p+Vector2(-28,64),"%d / %d"%[e.hp,e.max_hp],13)
- elif not active.is_empty():
-  if active=="salvage" or active=="arms":vehicle(ep,0.68,active=="arms",active=="salvage")
+ elif model.phase=="landmark":
+  if active in ["salvage","arms"]:vehicle(ep,0.68,active=="arms",active=="salvage")
   elif active=="tech":
    plate(Rect2(ep-Vector2(32,29),Vector2(64,58)),Color("657069"),3)
    for x in [-18,10]:plate(Rect2(ep+Vector2(x,-22),Vector2(12,41)),Color("283b35"),2)
-  else:crate(ep,model.explored and model.phase=="stop")
-  tag(ep-Vector2(0,57),route_name)
- else:
-  tag(Vector2(cx,h*0.28),"选择路线后出发")
-  draw_line(Vector2(cx,h*0.38),Vector2(cx,h*0.34),GOLD,2)
-  draw_polyline(PackedVector2Array([Vector2(cx-6,h*0.35),Vector2(cx,h*0.34),Vector2(cx+6,h*0.35)]),GOLD,2)
- if not choosing_route():tag(Vector2(w*0.80,h*0.11),"岔路",Color("bac9a9"))
- vehicle(pp,0.75 if choosing_route() else 0.9)
+  else:crate(ep)
+  tag(ep+Vector2(0,70),route_name)
+ vehicle(pp,0.82)
  bar(pp+Vector2(-34,55),68,float(model.hull)/model.max_hull,Color("99bd91"))
  if model.phase=="combat" and age<0.65:
   for effect in model.effects:
@@ -204,13 +190,15 @@ func _draw():
     if effect.damage>0:word(pp+Vector2(38,0),"−%d"%effect.damage,22,Color("f0a18a"))
    elif effect.type=="dry":tag(pp-Vector2(0,69),"缺弹 · 应急撞击",Color("e5a28a"))
    elif effect.type=="ram":tag(pp-Vector2(0,69),"撞击 · 车体−2",Color("e5a28a"))
- var status:String="点击前方路牌选择目的地" if choosing_route() else "停靠整备 · 不消耗时间"
- if model.phase=="travel":status="行进中 · %d%%"%int(progress*100)
- elif model.phase=="encounter":status="已抵达 · 点击物资箱"
+ var status:String="已停车 · 可整理或继续行驶"
+ if model.phase=="travel":status="行驶中 · %d km/h"%model.vehicle_speed()
+ elif model.phase=="landmark":status="发现地点 · 时间暂停"
  elif model.phase=="combat":status="自动作战 · 第%d拍"%model.combat.tick
  elif model.phase=="ended":status="本次旅程结束"
- elif model.explored:status="已停靠 · 整理战利品"
  if paused and model.phase in ["travel","combat"]:status="已暂停 · Space 继续"
+ if pickup_flash>0:
+  plate(Rect2(8,h-92,w-16,48),Color("223d2d"),6,GOLD)
+  word(Vector2(16,h-62),model.last_pickup,13,GOLD,w-32)
  plate(Rect2(8,8,w-16,34),Color("182820"),6)
  word(Vector2(20,31),status,14,GOLD,w-40)
  if hot:

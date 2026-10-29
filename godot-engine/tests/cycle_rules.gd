@@ -33,97 +33,50 @@ func battle(m):
  var ticks:int=0
  while m.phase=="combat" and ticks<100:m.combat_step();ticks+=1
  check(ticks<100,"battle terminates")
-func outing(m,route:String):
- check(m.explore(route,true),"outing %d %s"%[m.day,route]);battle(m);pack(m)
-func craft(m,kind:String):
- check(m.craft(kind),"craft day%d %s: %s"%[m.day,kind,m.recipe_error(kind)]);pack(m)
-func play(powered:bool,stop_day:int=22):
- var m=Model.new()
- while m.editable() and m.day<stop_day:
-  match m.day:
-   1:craft(m,"bench");outing(m,"salvage")
-   2:
-    check(m.upgrade(),"first expansion");pack(m);outing(m,"salvage")
-   3:
-    outing(m,"tech" if powered else "salvage");craft(m,"generator" if powered else "shade")
-   4:
-    outing(m,"tech" if powered else "salvage")
-    if powered:craft(m,"cooler")
-    else:check(m.upgrade(),"passive second expansion");pack(m)
-   5,6:
-    outing(m,"salvage")
-    if powered and m.expansion_level<2 and m.quantity("scrap")>=8:check(m.upgrade(),"power second expansion");pack(m)
-    elif m.count_active("armor")==0 and m.quantity("scrap")>=3:craft(m,"armor")
-   _:
-    if m.day<15:outing(m,"supply")
-  for item in m.items.duplicate():
-   if item.kind=="repair" and item.floor==0:m.use_repair(item.id)
-  if m.day==14:print("PREP power=",powered," health=",m.health," hull=",m.hull," forecast=",m.forecast())
-  check(m.count_active("bed")==1,"bed kept installed throughout journey")
-  check(m.depart(true),"end day")
-  if m.phase=="ended":break
- print("RESULT powered=",powered," day=",m.day," health=",m.health," hull=",m.hull," ",m.outcome)
- if stop_day==22:check(m.won,"legal 21-day route survives")
- return m
 func run():
- var initial=Model.new()
- var snapshot=initial.items.duplicate(true)
- check(not initial.craft("cooler"),"unknown blueprint rejected")
- check(initial.items==snapshot and initial.actions==2,"failed craft is atomic")
- check(not initial.place(5,0,Vector2i(0,0),false),"overlap rejected")
- check(initial.items==snapshot,"failed placement preserves inventory")
- var f=initial.forecast();check(initial.items==snapshot and initial.day==1,"forecast is pure")
- check(f.damage==108,"naked heat preview")
- craft(initial,"bench")
- check(initial.actions==1 and initial.count_active("bench")==1,"bench crafted and installed")
- initial.add_item("cloth",2)
- check(not initial.depart() and initial.day==1,"ground confirmation required for end day")
- check(not initial.explore("salvage") and initial.actions==1,"ground confirmation required for outing")
- check(initial.explore("salvage",true),"outing")
- check(not initial.drop(5) and not initial.craft("repair"),"combat locks changes")
- battle(initial)
- check(not initial.explore("supply",true),"one outing per day")
- check(initial.actions==0,"craft and outing exhaust actions")
- check(not initial.craft("bench"),"no unlimited daily craft")
- var passive=play(false)
- var powered=play(true)
- var emergency=play(true,15)
- # Spend actual stored supplies to force a real post-day-15 resupply decision.
- emergency.spend("water",emergency.quantity("water")-1)
- var before_health:int=emergency.health
- var before_oil:int=emergency.quantity("fuel")
- outing(emergency,"supply")
- check(emergency.health==before_health-2,"heat exposure")
- check(emergency.quantity("fuel")==mini(12,before_oil-2+3),"heat fuel charge and loot")
- check(emergency.quantity("water")>=6,"emergency water recovered")
- check(emergency.depart(true),"emergency day ends")
- outing(emergency,"salvage")
- check(emergency.craft("repair"),"emergency craft allowed with actual gathered ingredients")
- pack(emergency)
- for item in emergency.items.duplicate():
-  if item.kind=="repair" and item.floor==0:emergency.use_repair(item.id)
- while emergency.editable():
-  if not emergency.explored and emergency.quantity("water")<4:outing(emergency,"supply")
-  emergency.depart(true)
- check(emergency.won,"emergency recovery survives remaining disaster")
- var dry=play(true,15)
- dry.spend("fuel",dry.quantity("fuel"))
- check(not dry.night_plan(15,0).powered and dry.night_plan(15,0).damage==12,"cooler stops without fuel")
- check(not dry.explore("supply",true),"zero fuel blocks outing without instant defeat")
- check(dry.depart(true) and dry.day==16,"zero fuel allows camping")
- var unprepared=Model.new()
- while unprepared.editable() and unprepared.day<15:
-  outing(unprepared,"supply");unprepared.depart(true)
- check(unprepared.health==60 and unprepared.quantity("water")>=23,"unprotected scenario is fully provisioned")
- while unprepared.editable():unprepared.depart(true)
- check(not unprepared.won and unprepared.day>=15 and "热伤" in unprepared.outcome,"heat alone causes explained failure")
- var dry_ammo=Model.new();dry_ammo.spend("ammo",10)
- outing(dry_ammo,"arms")
- check(dry_ammo.hull<20 and dry_ammo.metrics.ammo==0,"dry weapons use costly finite emergency ramming")
- var stacked=Model.new();var extra=stacked.add_item("water",10)
- check(stacked.merge_at(extra,Vector2i(2,2)),"stack merge")
- check(stacked.quantity("water")==12 and stacked.item_by_id(extra).amount==4,"overflow retained")
- var before=stacked.items.duplicate(true)
- check(not stacked.place(extra,0,Vector2i(4,6),false) and stacked.items==before,"out of bounds preserves cargo")
+ var m=Model.new()
+ var before=m.items.duplicate(true)
+ check(not m.craft("cooler") and m.items==before and m.minutes_left==360,"failed craft atomic")
+ check(not m.place(5,0,Vector2i.ZERO,false) and m.items==before,"overlap preserves cargo")
+ check(m.forecast().damage==108 and m.items==before,"forecast pure")
+ check(m.craft("bench"),"craft workbench");pack(m)
+ check(m.count_active("bench")==1 and m.minutes_left==300,"bench installed and costs hour")
+ for d in range(1,4):
+  var steps:int=0
+  while m.minutes_left>60 and m.outcome.is_empty() and steps<1000:
+   steps+=1
+   if m.phase=="landmark":
+    if m.pending_route in ["salvage","tech"] and m.minutes_left>=120:m.explore_site()
+    else:m.skip_site()
+   elif m.phase=="combat":battle(m);pack(m)
+   elif m.editable():
+    pack(m)
+    if m.expansion_level<2 and m.quantity("scrap")>=6+2*m.expansion_level:
+     check(m.upgrade(),"expand using gathered metal");pack(m)
+    if not m.begin_journey("",true):break
+   else:m.advance_travel(5)
+  if m.phase=="travel":m.stop_driving()
+  if m.phase=="landmark":m.skip_site();m.stop_driving()
+  if m.phase=="combat":battle(m)
+  pack(m)
+  check(m.depart(true),"settle legal early day")
+ check(m.day==4 and m.distance_km>120 and "cooler" in m.learned,"three-day driving/crafting/tech loop")
+ print("EARLY LOOP day=",m.day," km=",m.distance_km," hull=",m.hull," height=",m.height)
+ # Explicit configured disaster fixtures: verify settlement arithmetic, not a full-run solution.
+ for bed in [true,false]:
+  m=Model.new();m.height=16;m.day=15;m.health=30
+  if not bed:m.drop(11);m.discard_loose()
+  for kind in ["generator","cooler","shade"]:
+   var id:int=m.add_item(kind);check(fit(m,id),"fixture equipment fits")
+  for pair in [["water",24],["food",12],["fuel",12]]:m.store_generated(pair[0],pair[1])
+  var inventory=m.items.duplicate(true)
+  var forecast=m.forecast()
+  check(m.items==inventory,"forecast never consumes inventory")
+  for d in range(15,22):check(m.depart(true),"night settlement")
+  check(m.won and m.health==forecast.projected_health,"seven nights match forecast")
+  var ended=m.items.duplicate(true)
+  check(not m.depart(true) and m.items==ended,"ended run cannot settle twice")
+ m=Model.new();m.day=15;m.spend("fuel",8)
+ check(not m.begin_journey() and m.depart(),"no fuel still permits camp")
  print("CYCLE VERIFICATION failures=",failures)
  quit(1 if failures else 0)

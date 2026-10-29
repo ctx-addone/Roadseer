@@ -12,8 +12,8 @@ var road_view
 var road_action:Button
 var crew_button:Button
 var grid_scroll:ScrollContainer
-var journey_elapsed:float=0.0
-const JOURNEY_SECONDS:float=3.0
+var travel_readout:Label
+var panel_tick:float=0.0
 var reduced_motion:bool=false
 var day_label:Label
 var phase_label:Label
@@ -44,7 +44,6 @@ var battle_summary:Label
 var drag_offset:Vector2i=Vector2i.ZERO
 var panel:String="home"
 var recipe_kind:String=""
-var route_selected:String=""
 var tracked_recipe:String=""
 var settlement:Dictionary={}
 var paused:bool=false
@@ -89,13 +88,14 @@ func _ready():
  var road_header=HBoxContainer.new();road.add_child(road_header)
  road_header.add_child(label("前方道路",20));var road_spacer=Control.new();road_spacer.size_flags_horizontal=SIZE_EXPAND_FILL;road_header.add_child(road_spacer)
  road_header.add_child(label("N ↑",14,GOLD))
+ travel_readout=label("",14,GOLD);travel_readout.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART;road.add_child(travel_readout)
  road_view=RoadView.new();road_view.model=model;road_view.size_flags_vertical=SIZE_EXPAND_FILL;road.add_child(road_view)
  road_view.encounter_clicked.connect(road_interact)
  road_view.route_chosen.connect(choose_road_route)
  battle_controls=HBoxContainer.new();road.add_child(battle_controls)
  pause_button=button("暂停 Space",toggle_pause);pause_button.size_flags_horizontal=SIZE_EXPAND_FILL;battle_controls.add_child(pause_button)
- speed_button=button("速度 ×1",func():speed=2 if speed==1 else 1;refresh(false));battle_controls.add_child(speed_button)
- road_action=button("请先点击上方路牌",road_interact,true);road.add_child(road_action)
+ speed_button=button("播放 ×1",func():speed=2 if speed==1 else 1;refresh(false));battle_controls.add_child(speed_button)
+ road_action=button("开始行驶 →",road_interact,true);road.add_child(road_action)
  var left=VBoxContainer.new();left.size_flags_horizontal=SIZE_EXPAND_FILL;left.size_flags_stretch_ratio=1.04;left.add_theme_constant_override("separation",10);body.add_child(left)
  var stage=card(left);stage.size_flags_vertical=SIZE_EXPAND_FILL
  var board_header=HBoxContainer.new();stage.add_child(board_header)
@@ -161,7 +161,7 @@ func toast(text:String=""):
 func _process(delta:float):
  if toast_time>0:
   toast_time-=delta
-  if toast_time<=0:feedback.text="整理不耗行动；外出和日结会离开当前停靠点。"
+  if toast_time<=0:feedback.text="停车整理免费；速度决定路程，播放倍速只缩短等待。"
  if drag_id>=0:
   var mouse:Vector2=drag_pointer
   var viewport_rect:Rect2=grid_scroll.get_global_rect()
@@ -171,11 +171,15 @@ func _process(delta:float):
    grid.hover=grid.screen_cell(mouse-grid.global_position)-drag_offset;grid.queue_redraw()
  if paused:return
  if model.phase=="travel":
-  journey_elapsed+=delta*speed
-  road_view.progress=minf(1,journey_elapsed/JOURNEY_SECONDS)
-  if journey_elapsed>=JOURNEY_SECONDS:
-   model.arrive();clock_accum=0;panel="home";refresh()
-   toast("已抵达，点击道路物资箱或右侧按钮领取。" if model.phase=="encounter" else "遭遇敌人，小爱已接管自动作战。")
+  var previous_pickup:int=model.pickup_serial
+  model.advance_travel(delta*speed*Model.MINUTES_PER_SECOND)
+  panel_tick+=delta
+  if model.pickup_serial!=previous_pickup:toast(model.last_pickup);road_view.pickup_flash=2.5
+  if model.phase!="travel":
+   panel="home";refresh();toast()
+  else:
+   refresh(false)
+   if panel_tick>=0.5 and panel=="home":panel_tick=0;render_panel()
   return
  if model.phase!="combat":return
  if road_view.age>0.65 and not grid.highlighted.is_empty():grid.highlighted=[];grid.queue_redraw()
@@ -300,24 +304,24 @@ func perform_action(discard:bool):
   selected_id=-1;moving=false;paused=false;clock_accum=0;grid.highlighted=[]
   if pending_action=="end":
    settlement={"day":completed_day,"health_delta":model.health-before_health,"plan":plan,"report":model.day_reports[-1] if not model.day_reports.is_empty() else model.outcome};panel="settlement"
-   route_selected="";road_view.last_route="";road_view.progress=0
+   road_view.last_route=""
   else:
-   panel="home";journey_elapsed=0;road_view.progress=0;road_view.last_route=pending_action
+   panel="home"
  toast();refresh()
 func ask_restart():
  restart_was_paused=paused;paused=true;refresh(false);restart_dialog.popup_centered(Vector2i(500,180))
 func reset_run():
  model=Model.new();grid.model=model;road_view.model=model
  drag_candidate=-1;drag_id=-1;grid.dragging=false;grid.hover=Vector2i(-1,-1)
- selected_id=-1;moving=false;paused=false;clock_accum=0;journey_elapsed=0;road_view.progress=0;road_view.last_route="";panel="home";tracked_recipe="";route_selected="";settlement={};grid.highlighted=[]
+ selected_id=-1;moving=false;paused=false;speed=1;clock_accum=0;road_view.pickup_flash=0;road_view.last_route="";panel="home";tracked_recipe="";settlement={};grid.highlighted=[]
  grid_scroll.scroll_vertical=0;panel_scroll.scroll_vertical=0
- refresh();toast("先搭建制作台，再规划你的抗灾方案。")
+ refresh();toast("开始行驶，沿途搜集物资；点击制作台可提升车速。")
 
 func refresh(rebuild:bool=true):
  if grid==null:return
  if model.item_by_id(selected_id).is_empty():selected_id=-1;moving=false
  day_label.text="第 %02d 天"%model.day
- phase_label.text=("准备期  /  距三日凌空 %d 天"%(15-model.day) if model.day<15 else "三日凌空  /  第 %d / 7 天"%(model.day-14))+"     ·     行动 %d / 2"%model.actions
+ phase_label.text=("准备期  /  距三日凌空 %d 天"%(15-model.day) if model.day<15 else "三日凌空  /  第 %d / 7 天"%(model.day-14))+"  ·  剩余 "+model.time_text()
  for kind in resource_labels:
   resource_labels[kind].text="%d/%d"%[model.health,model.max_health] if kind=="health" else "%d/%d"%[model.hull,model.max_hull] if kind=="hull" else str(model.quantity(kind))
   resource_labels[kind].add_theme_color_override("font_color",Color("e8a27e") if (kind=="health" and model.health<20) or (kind=="hull" and model.hull<12) or (kind in ["water","food","fuel","ammo"] and model.quantity(kind)==0) else INK)
@@ -326,14 +330,16 @@ func refresh(rebuild:bool=true):
  grid.visible=true;road_view.visible=true
  grid.custom_minimum_size.y=model.height*48+90
  battle_controls.visible=model.phase in ["combat","travel"]
- road_view.paused=paused;road_view.speed=speed;road_view.reduced_motion=reduced_motion;road_view.preview_route=route_selected;road_view.sync_routes()
- road_action.visible=not battle_controls.visible
- road_action.disabled=model.phase=="ended" or (model.editable() and not model.explored and (route_selected.is_empty() or not model.outing_error(route_selected).is_empty()))
- road_action.text="打开物资箱 →" if model.phase=="encounter" else "整理战利品 →" if model.explored else "出发 · "+RoadView.ROUTE_NAMES[route_selected] if not route_selected.is_empty() else "请先点击上方路牌"
+ road_view.paused=paused;road_view.speed=speed;road_view.reduced_motion=reduced_motion;road_view.sync_routes()
+ travel_readout.text="车速 %d km/h  ·  今日 %.1f km\n总里程 %.1f km  ·  宝箱 %d个"%[model.vehicle_speed(),model.day_distance,model.distance_km,model.caches_today]
+ road_action.visible=model.phase!="combat"
+ road_action.disabled=model.phase in ["ended","landmark"] or (model.editable() and not model.outing_error().is_empty())
+ road_action.text="靠边停车 · 整理背包" if model.phase=="travel" else "请在道路上选择" if model.phase=="landmark" else "今天时间用完" if model.minutes_left<=0 else "继续行驶 →" if model.distance_km>0 else "开始行驶 →"
+ road_action.tooltip_text=model.outing_error() if model.editable() else ""
  crew_button.text="成员 %d人"%model.members.size()
  board_title.text="我的车辆 · %d×%d"%[model.width,model.height]
- board_hint.text="战斗中 · 布局锁定，发光设备正在生效" if fighting else "行进中 · 布局锁定" if model.phase=="travel" else "抵达后先处理道路遭遇" if model.phase=="encounter" else "选位置放置 · R旋转 · Esc取消" if moving else "点击设施使用 · 拖动物品整理 · R旋转"
- pause_button.text="继续 Space" if paused else "暂停 Space";speed_button.text="速度 ×%d"%speed
+ board_hint.text="战斗中 · 布局锁定，发光设备正在生效" if fighting else "行进中 · 布局锁定" if model.phase=="travel" else "抵达后先处理道路遭遇" if model.phase=="landmark" else "选位置放置 · R旋转 · Esc取消" if moving else "点击设施使用 · 拖动物品整理 · R旋转"
+ pause_button.text="继续 Space" if paused else "暂停 Space";speed_button.text="播放 ×%d"%speed
  var night:Dictionary=model.night_plan(model.day,model.quantity("fuel"))
  night_label.text="今晚  ·  水 %d  /  粮 1  /  制冷油 %d     %s"%[night.water,night.fuel,"预计热伤 %d"%night.damage if night.damage>0 else "防护后无热伤"]
  var shortage:bool=model.quantity("water")<night.water or model.quantity("food")<1
@@ -342,7 +348,7 @@ func refresh(rebuild:bool=true):
  if shortage:night_label.text+="  ·  补给不足"
  night_label.add_theme_color_override("font_color",Color("e3ad7e") if shortage or night.damage>0 else INK)
  travel_button.disabled=not model.editable()
- travel_button.text="行进中" if model.phase=="travel" else "先处理遭遇" if model.phase=="encounter" else "战斗进行中" if fighting else "本局已结束" if model.phase=="ended" else "度过最后一晚 →" if model.day==21 else "结束第%d天 →"%model.day
+ travel_button.text="行进中" if model.phase=="travel" else "先处理遭遇" if model.phase=="landmark" else "战斗进行中" if fighting else "本局已结束" if model.phase=="ended" else "度过最后一晚 →" if model.day==21 else "结束第%d天 →"%model.day
  if model.phase=="ended":night_label.text=model.outcome;night_label.tooltip_text=model.outcome
  ground_box.visible=not model.ground().is_empty() and model.editable()
  if fighting and is_instance_valid(battle_summary):battle_summary.text="本场消耗弹药 %d\n防护挡下 %d · 车体损失 %d"%[model.combat.ammo,model.combat.blocked,model.combat.damage]
@@ -364,16 +370,16 @@ func source_for(kind:String)->String:
  if kind=="electronics":return "电站遗址线"
  return "生活补给线"
 func choose_road_route(value:String):
- if not model.editable() or model.explored:return
- if not Model.ROUTES.has(value):return
- route_selected=value;open_panel("explore")
+ if model.phase!="landmark":return
+ road_view.last_route=model.pending_route
+ var changed:bool=model.explore_site() if value=="explore" else model.skip_site()
+ if changed:panel="home";paused=false;clock_accum=0
+ toast();refresh()
+
 func road_interact():
- if model.phase=="encounter":collect_road_loot()
- elif model.editable():
-  if model.explored:open_panel("home")
-  elif not route_selected.is_empty():request_outing(route_selected)
-func collect_road_loot():
- if model.collect_encounter():panel="home";toast("物资已放在车厢下方，装车后可使用。");refresh()
+ if model.phase=="travel":
+  model.stop_driving();paused=false;panel="home";toast();refresh()
+ elif model.editable():request_outing("drive")
 
 func render_panel():
  wipe(panel_body);panel_back.visible=panel!="home"
@@ -382,19 +388,20 @@ func render_panel():
   text_block(model.outcome,GOLD);text_block("剩余健康 %d  ·  车体 %d\n完成 %d 天日结，经历 %d 场战斗。"%[model.health,model.hull,model.day_reports.size(),model.battle_reports.size()])
   action("查看旅程记录",func():open_panel("log"));action("从第1天再试",ask_restart,true,true);return
  if model.phase=="travel" and panel not in ["log","menu"]:
-  panel_title.text="正在行进";panel_back.visible=false
-  text_block(Model.ROUTES[model.pending_route].name,GOLD)
-  text_block("前方 · "+RoadView.ROUTE_NAMES[model.pending_route])
-  text_block(Model.ROUTES[model.pending_route].hint,MUTED)
-  text_block("本次外出已消耗1行动。抵达后处理遭遇，途中不会再次扣除补给。",MUTED)
-  action("暂停观察" if not paused else "继续行进",toggle_pause)
+  panel_title.text="沿途搜集";panel_back.visible=false
+  text_block("%d km/h · 剩余%s"%[model.vehicle_speed(),model.time_text()],GOLD)
+  text_block("下个宝箱 %.1f km\n下个大型地点 %.1f km"%[maxf(0,model.next_cache*Model.CACHE_SPACING-model.distance_km),maxf(0,model.next_site*Model.SITE_SPACING-model.distance_km)])
+  text_block("普通物资自动合并、装车；装不下会停车，物资保留在待装区。",MUTED)
+  text_block("行驶每小时预付2油、1水，健康−2。" if model.day>=15 else "行驶每小时预付1油；停车后剩余额度保留。",MUTED)
+  if not model.last_pickup.is_empty():text_block("最近收取\n"+model.last_pickup,GOLD)
   return
- if model.phase=="encounter" and panel not in ["log","menu"]:
-  panel_title.text="发现物资箱";panel_back.visible=false
-  text_block("周围安全 · 可以收集",GOLD)
-  text_block(Model.ROUTES[model.pending_route].hint,MUTED)
-  action("打开物资箱",collect_road_loot,true,true)
-  text_block("本次外出已付费，开箱不额外消耗行动。物资需要放入车厢。",MUTED)
+ if model.phase=="landmark" and panel not in ["log","menu"]:
+  panel_title.text="发现大型地点";panel_back.visible=false
+  text_block(RoadView.ROUTE_NAMES[model.pending_route],GOLD)
+  text_block(Model.ROUTES[model.pending_route].hint)
+  text_block("探索耗时1小时，包含搜索和战斗；略过不耗时。选择期间时间暂停。",MUTED)
+  var error:String=model.site_error()
+  text_block(error if not error.is_empty() else "在左侧道路选择探索或继续赶路。",GOLD)
   return
  if model.phase=="combat" and panel not in ["log","menu"]:
   panel_title.text="小爱自动作战";panel_back.visible=false
@@ -427,31 +434,23 @@ func render_panel():
     else:
      text_block("用2金属搭建制作台，占4格。装车后点击它，可制作抗灾设备和扩容。",MUTED)
      var error:String=model.recipe_error("bench")
-     action("搭建制作台 · 2金属 / 1行动",func():craft("bench"),error.is_empty(),true)
+     action("搭建制作台 · 2金属 / 1小时",func():craft("bench"),error.is_empty(),true)
      if not error.is_empty():text_block(error,GOLD)
    else:
     text_block("为三日凌空做好准备",GOLD)
     text_block("点击车内制作台，选择隔热或制冷设备。储备足够的饮水、口粮和燃油。",MUTED)
    panel_body.add_child(HSeparator.new())
-   text_block("在左侧道路点选路牌，再在道路下方确认出发。",GOLD)
-   text_block("今日已完成外出，可继续整理和制作。" if model.explored else "每天最多外出1次，消耗1行动。",MUTED)
+   text_block("左侧开始行驶，物资按里程出现。",GOLD)
+   text_block("剩余%s · 车速%d km/h\n每20km一个普通宝箱，每60km一个大型地点。"%[model.time_text(),model.vehicle_speed()],MUTED)
+   var drive_error:String=model.outing_error()
+   if not drive_error.is_empty():text_block(drive_error,GOLD)
+   if not model.last_pickup.is_empty():text_block("最近收取 · "+model.last_pickup,GOLD)
    action("查看抗灾准备",func():open_panel("forecast"))
    if model.count_active("bed")==0:
     text_block("缺少睡眠空间：今晚不能通过休息恢复健康。",GOLD)
     action("制作单人床",func():show_recipe("bed"))
    if not model.last_report.is_empty():
     text_block("最近结果",MUTED);text_block(model.last_report)
-  "explore":
-   panel_title.text="路线情报"
-   if route_selected.is_empty():
-    text_block("点击左侧道路上的路牌，查看目的地情报。",GOLD)
-   else:
-    var entry:Dictionary=Model.ROUTES[route_selected]
-    text_block(RoadView.ROUTE_NAMES[route_selected],GOLD)
-    text_block(entry.name,MUTED);text_block(entry.hint)
-    text_block("外出：2油 + 1水 + 1行动，暴晒健康−2" if model.day>=15 else "外出：1油 + 1行动",GOLD)
-    var error:String=model.outing_error(route_selected)
-    text_block(error if not error.is_empty() else "已选中。点击左侧道路下方的出发按钮。",MUTED)
   "crew":
    panel_title.text="成员 · %d人"%model.members.size()
    for member in model.members:
@@ -469,15 +468,21 @@ func render_panel():
    panel_title.text=definition.name
    text_block("%d×%d · %d格 · %s"%[model.footprint(item).x,model.footprint(item).y,model.footprint(item).x*model.footprint(item).y,"已装车" if item.floor==0 else "待装车"],MUTED)
    if item.kind=="bench" and item.floor==0:
-    text_block("选择图纸，查看缺口或制作。每次制作消耗1行动。",MUTED)
+    panel_body.add_child(HSeparator.new())
+    text_block("发动机 · %d km/h"%model.vehicle_speed(),GOLD)
+    var engine_error:String=model.engine_error()
+    action("提升至%d km/h · %d金属 / 1小时"%[model.vehicle_speed()+20,4+model.engine_level*2] if model.engine_level<2 else "发动机已达80 km/h",func():model.upgrade_engine();toast();refresh(),engine_error.is_empty())
+    if not engine_error.is_empty():text_block(engine_error,MUTED)
+    text_block("选择图纸，查看缺口或制作。每次制作消耗1小时。",MUTED)
     for kind in Model.RECIPES:
      if kind=="bench":continue
      var error:String=model.recipe_error(kind)
      action(Model.CATALOG[kind].name+"  ·  "+("可制作" if error.is_empty() else "未学会" if kind not in model.learned else "查看配方"),show_recipe.bind(kind))
     panel_body.add_child(HSeparator.new())
     var cost:int=6+2*model.expansion_level
-    action("扩容到4×%d · %d金属"%[model.height+2,cost] if model.expansion_level<2 else "车厢已达本轮上限",func():model.upgrade();toast();refresh(),model.expansion_level<2 and model.actions>0 and model.quantity("scrap")>=cost)
-    text_block("扩容消耗1行动，增加8格。",MUTED)
+    action("扩容到4×%d · %d金属"%[model.height+2,cost] if model.expansion_level<2 else "车厢已达本轮上限",func():model.upgrade();toast();refresh(),model.expansion_level<2 and model.minutes_left>=60 and model.quantity("scrap")>=cost)
+    text_block("扩容消耗1小时，增加8格。",MUTED)
+
    else:
     text_block(definition.desc)
     if item.kind in ["driver","seat"]:
@@ -490,12 +495,12 @@ func render_panel():
     if item.kind=="cooler" and item.floor==0:
      action("夜间制冷："+("开启" if model.cooling_enabled else "关闭"),func():model.cooling_enabled=not model.cooling_enabled;refresh())
      text_block("准备期待机；高温夜间需车内发电机和燃油。",MUTED)
-    if item.kind=="repair" and item.floor==0:action("使用修理包 · 车体+10",func():model.use_repair(selected_id);toast();refresh(),model.hull<model.max_hull,true)
+    if item.kind=="repair" and item.floor==0:action("使用修理包 · +10 / 30分钟",func():model.use_repair(selected_id);toast();refresh(),model.hull<model.max_hull and model.minutes_left>=30,true)
    panel_body.add_child(HSeparator.new());item_actions(item)
   "recipe":
    var definition:Dictionary=Model.CATALOG[recipe_kind]
    panel_title.text=definition.name+"图纸"
-   text_block("占用%d格 · 制作需1行动"%(definition.size.x*definition.size.y),GOLD);text_block(definition.desc)
+   text_block("占用%d格 · 制作需1小时"%(definition.size.x*definition.size.y),GOLD);text_block(definition.desc)
    text_block("制作材料",MUTED)
    for kind in Model.RECIPES[recipe_kind].cost:
     var required:int=Model.RECIPES[recipe_kind].cost[kind]

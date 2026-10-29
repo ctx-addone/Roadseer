@@ -33,7 +33,7 @@ func _initialize():
  m=Model.new();m.health=50;m.spend("water",6);m.depart()
  check(m.health==44,"bed does not heal through water shortage")
  m=Model.new();m.members[0].seat_id=2
- check(not m.begin_journey("supply") and m.actions==2 and m.quantity("fuel")==8,"driving requires occupied driver seat and failed departure does not charge")
+ check(not m.begin_journey("supply") and m.minutes_left==360 and m.quantity("fuel")==8,"driving requires occupied driver seat and failed departure does not charge")
  m=Model.new();m.add_item("cloth",2,0,Vector2i(2,1));m.item_by_id(m.next_id-1).rotated=true
  check(m.craft("bed"),"replacement bed can be crafted without a workbench")
  check(m.ground().size()==1 and m.ground()[0].kind=="bed","crafted bed is physical two-cell cargo")
