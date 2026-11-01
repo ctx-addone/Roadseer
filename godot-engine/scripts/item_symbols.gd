@@ -5,6 +5,13 @@ static func paint(canvas:CanvasItem,kind:String,rect:Rect2,color:Color=Color("e2
  var u:float=minf(rect.size.x,rect.size.y)/2.4
  var stroke:float=2.0
  match kind:
+  "wood","plank":
+   for y in [-0.6,0.1]:
+    canvas.draw_rect(Rect2(c+Vector2(-u,y*u),Vector2(2*u,u*0.5)),color,false,stroke)
+  "chest","long_chest":
+   canvas.draw_rect(Rect2(c-Vector2(u,u*0.8),Vector2(2*u,1.6*u)),color,false,stroke)
+   canvas.draw_line(c+Vector2(-u,-u*0.2),c+Vector2(u,-u*0.2),color,stroke)
+   canvas.draw_rect(Rect2(c-Vector2(u*0.15,u*0.1),Vector2(u*0.3,u*0.5)),color)
   "water":
    canvas.draw_colored_polygon(PackedVector2Array([c+Vector2(0,-u),c+Vector2(-u*0.7,u*0.15),c+Vector2(-u*0.5,u*0.8),c+Vector2(u*0.5,u*0.8),c+Vector2(u*0.7,u*0.15)]),color)
   "food","raw":

@@ -1,0 +1,6 @@
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+
+SPEED 40 km/h: 240.0 km, boxes=12
+SPEED 60 km/h: 360.0 km, boxes=18
+SPEED 80 km/h: 480.0 km, boxes=24
+JOURNEY ACCEPTANCE failures=0

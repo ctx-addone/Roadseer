@@ -292,7 +292,7 @@ func request_outing(value:String):
 func confirm_action():
  if model.ground().is_empty():perform_action(false);return
  var names:PackedStringArray=[]
- for item in model.ground():names.append("%s ×%d"%[Model.CATALOG[item.kind].name,item.amount])
+ for item in model.ground():names.append("%s ×%d"%[model.CATALOG[item.kind].name,item.amount])
  discard_dialog.dialog_text="%s将离开当前停靠点。\n\n尚未装车：%s\n\n这些物品无法在离开后取回。"%["结束当天" if pending_action=="end" else "外出","、".join(names)]
  discard_dialog.popup_centered(Vector2i(560,240))
 func perform_action(discard:bool):
@@ -356,14 +356,14 @@ func refresh(rebuild:bool=true):
  wipe(ground_list)
  ground_heading.text="待装物资 · %d件   点击或拖入车厢"%model.ground().size()
  for item in model.ground():
-  var tile=CargoCard.new();tile.model=model;tile.item_id=item.id;tile.tooltip_text=Model.CATALOG[item.kind].desc;tile.disabled=not model.editable()
+  var tile=CargoCard.new();tile.model=model;tile.item_id=item.id;tile.tooltip_text=model.CATALOG[item.kind].desc;tile.disabled=not model.editable()
   tile.pressed.connect(select_item.bind(item.id));ground_list.add_child(tile)
  render_panel()
 
 func item_actions(item:Dictionary):
  var row=HBoxContainer.new();row.add_theme_constant_override("separation",8);panel_body.add_child(row)
  row.add_child(button("放入车厢" if item.floor<0 else "移动",start_move))
- if item.floor==0 and not Model.CATALOG[item.kind].get("fixed",false):row.add_child(button("卸到地面",drop_selection))
+ if item.floor==0 and not model.CATALOG[item.kind].get("fixed",false):row.add_child(button("卸到地面",drop_selection))
  if moving:text_block("正在放置 · R旋转，Esc取消",GOLD)
 func source_for(kind:String)->String:
  if kind in ["scrap","cloth"]:return "废车拆解线"
@@ -398,7 +398,7 @@ func render_panel():
  if model.phase=="landmark" and panel not in ["log","menu"]:
   panel_title.text="发现大型地点";panel_back.visible=false
   text_block(RoadView.ROUTE_NAMES[model.pending_route],GOLD)
-  text_block(Model.ROUTES[model.pending_route].hint)
+  text_block(model.ROUTES[model.pending_route].hint)
   text_block("探索耗时1小时，包含搜索和战斗；略过不耗时。选择期间时间暂停。",MUTED)
   var error:String=model.site_error()
   text_block(error if not error.is_empty() else "在左侧道路选择探索或继续赶路。",GOLD)
@@ -409,18 +409,18 @@ func render_panel():
   battle_summary=paragraph("本场消耗弹药 %d\n防护挡下 %d · 车体损失 %d"%[model.combat.ammo,model.combat.blocked,model.combat.damage],GOLD);panel_body.add_child(battle_summary)
   for item in model.items:
    if item.floor==0 and item.kind in ["gun","cannon","armor","interceptor"]:
-    text_block(Model.CATALOG[item.kind].name);text_block(Model.CATALOG[item.kind].desc,MUTED)
+    text_block(model.CATALOG[item.kind].name);text_block(model.CATALOG[item.kind].desc,MUTED)
   action("查看战斗记录",func():open_panel("log"));return
  match panel:
   "home":
    panel_title.text="今天的安排"
    if not tracked_recipe.is_empty():
-    text_block("正在准备 · "+Model.CATALOG[tracked_recipe].name,GOLD)
+    text_block("正在准备 · "+model.CATALOG[tracked_recipe].name,GOLD)
     var missing:PackedStringArray=[]
     if tracked_recipe not in model.learned:missing.append("前往电站遗址学习图纸")
-    for kind in Model.RECIPES[tracked_recipe].cost:
-     var gap:int=maxi(0,int(Model.RECIPES[tracked_recipe].cost[kind])-model.quantity(kind))
-     if gap>0:missing.append("缺%d%s · %s"%[gap,Model.CATALOG[kind].name,source_for(kind)])
+    for kind in model.RECIPES[tracked_recipe].cost:
+     var gap:int=maxi(0,int(model.RECIPES[tracked_recipe].cost[kind])-model.quantity(kind))
+     if gap>0:missing.append("缺%d%s · %s"%[gap,model.CATALOG[kind].name,source_for(kind)])
     text_block("\n".join(missing) if not missing.is_empty() else "材料已齐，点击车内制作台加工。",MUTED)
     action("查看追踪图纸",func():show_recipe(tracked_recipe))
    elif model.count_active("bench")==0:
@@ -456,7 +456,7 @@ func render_panel():
    for member in model.members:
     text_block(member.name,GOLD)
     var seat:Dictionary=model.item_by_id(member.seat_id)
-    text_block("座位："+Model.CATALOG[seat.kind].name if not seat.is_empty() and seat.floor==0 else "尚未入座")
+    text_block("座位："+model.CATALOG[seat.kind].name if not seat.is_empty() and seat.floor==0 else "尚未入座")
     text_block("健康 %d / %d"%[model.health,model.max_health])
    text_block("当前1人，3个客座空置。小爱为车载自动作战系统，不占座位或床位。",MUTED)
    text_block("单人床 %d张 · 可睡 %d/%d人"%[model.count_active("bed"),model.rest_assignments().size(),model.members.size()],GOLD)
@@ -464,7 +464,7 @@ func render_panel():
   "item","workshop":
    var item:Dictionary=model.item_by_id(selected_id)
    if item.is_empty():panel="home";render_panel();return
-   var definition:Dictionary=Model.CATALOG[item.kind]
+   var definition:Dictionary=model.CATALOG[item.kind]
    panel_title.text=definition.name
    text_block("%d×%d · %d格 · %s"%[model.footprint(item).x,model.footprint(item).y,model.footprint(item).x*model.footprint(item).y,"已装车" if item.floor==0 else "待装车"],MUTED)
    if item.kind=="bench" and item.floor==0:
@@ -473,11 +473,11 @@ func render_panel():
     var engine_error:String=model.engine_error()
     action("提升至%d km/h · %d金属 / 1小时"%[model.vehicle_speed()+20,4+model.engine_level*2] if model.engine_level<2 else "发动机已达80 km/h",func():model.upgrade_engine();toast();refresh(),engine_error.is_empty())
     if not engine_error.is_empty():text_block(engine_error,MUTED)
-    text_block("选择图纸，查看缺口或制作。每次制作消耗1小时。",MUTED)
-    for kind in Model.RECIPES:
+    text_block("选择图纸，查看材料缺口和制作耗时。",MUTED)
+    for kind in model.RECIPES:
      if kind=="bench":continue
      var error:String=model.recipe_error(kind)
-     action(Model.CATALOG[kind].name+"  ·  "+("可制作" if error.is_empty() else "未学会" if kind not in model.learned else "查看配方"),show_recipe.bind(kind))
+     action(model.CATALOG[kind].name+"  ·  "+("可制作" if error.is_empty() else "未学会" if kind not in model.learned else "查看配方"),show_recipe.bind(kind))
     panel_body.add_child(HSeparator.new())
     var cost:int=6+2*model.expansion_level
     action("扩容到4×%d · %d金属"%[model.height+2,cost] if model.expansion_level<2 else "车厢已达本轮上限",func():model.upgrade();toast();refresh(),model.expansion_level<2 and model.minutes_left>=60 and model.quantity("scrap")>=cost)
@@ -498,14 +498,14 @@ func render_panel():
     if item.kind=="repair" and item.floor==0:action("使用修理包 · +10 / 30分钟",func():model.use_repair(selected_id);toast();refresh(),model.hull<model.max_hull and model.minutes_left>=30,true)
    panel_body.add_child(HSeparator.new());item_actions(item)
   "recipe":
-   var definition:Dictionary=Model.CATALOG[recipe_kind]
+   var definition:Dictionary=model.CATALOG[recipe_kind]
    panel_title.text=definition.name+"图纸"
-   text_block("占用%d格 · 制作需1小时"%(definition.size.x*definition.size.y),GOLD);text_block(definition.desc)
+   text_block("占用%d格 · 制作需%d分钟"%[definition.size.x*definition.size.y,model.RECIPES[recipe_kind].get("minutes",60)],GOLD);text_block(definition.desc)
    text_block("制作材料",MUTED)
-   for kind in Model.RECIPES[recipe_kind].cost:
-    var required:int=Model.RECIPES[recipe_kind].cost[kind]
+   for kind in model.RECIPES[recipe_kind].cost:
+    var required:int=model.RECIPES[recipe_kind].cost[kind]
     var have:int=model.quantity(kind)
-    text_block("%s  %d / %d"%[Model.CATALOG[kind].name,have,required],INK if have>=required else GOLD)
+    text_block("%s  %d / %d"%[model.CATALOG[kind].name,have,required],INK if have>=required else GOLD)
     if have<required:text_block("来源："+source_for(kind),MUTED)
    var error:String=model.recipe_error(recipe_kind)
    action("制作 "+definition.name,func():craft(recipe_kind),error.is_empty(),true)

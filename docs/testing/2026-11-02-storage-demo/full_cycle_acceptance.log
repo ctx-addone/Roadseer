@@ -1,0 +1,45 @@
+Godot Engine v4.6.2.stable.official.71f334935 - https://godotengine.org
+
+passive_insulation NIGHT 1 health=60 hull=38 water=7 food=7 fuel=6 km=120.0
+passive_insulation NIGHT 2 health=60 hull=38 water=16 food=14 fuel=6 km=280.0
+passive_insulation NIGHT 3 health=60 hull=36 water=23 food=19 fuel=12 km=430.0
+passive_insulation NIGHT 4 health=60 hull=36 water=23 food=23 fuel=12 km=699.999999999999
+passive_insulation NIGHT 5 health=60 hull=36 water=23 food=23 fuel=11 km=1100.0
+passive_insulation NIGHT 6 health=60 hull=36 water=23 food=23 fuel=11 km=1420.0
+passive_insulation NIGHT 7 health=60 hull=36 water=23 food=23 fuel=12 km=1620.0
+passive_insulation NIGHT 8 health=60 hull=36 water=22 food=22 fuel=12 km=1620.0
+passive_insulation NIGHT 9 health=60 hull=36 water=21 food=21 fuel=12 km=1620.0
+passive_insulation NIGHT 10 health=60 hull=36 water=20 food=20 fuel=12 km=1620.0
+passive_insulation NIGHT 11 health=60 hull=36 water=19 food=19 fuel=12 km=1620.0
+passive_insulation NIGHT 12 health=60 hull=36 water=18 food=18 fuel=12 km=1620.0
+passive_insulation NIGHT 13 health=60 hull=36 water=17 food=17 fuel=12 km=1620.0
+passive_insulation NIGHT 14 health=60 hull=36 water=16 food=16 fuel=12 km=1620.0
+passive_insulation NIGHT 15 health=56 hull=36 water=14 food=15 fuel=12 km=1620.0
+passive_insulation NIGHT 16 health=52 hull=36 water=12 food=14 fuel=12 km=1620.0
+passive_insulation NIGHT 17 health=44 hull=36 water=10 food=13 fuel=12 km=1620.0
+passive_insulation NIGHT 18 health=32 hull=36 water=7 food=12 fuel=12 km=1620.0
+passive_insulation NIGHT 19 health=20 hull=36 water=4 food=11 fuel=12 km=1620.0
+passive_insulation NIGHT 20 health=12 hull=36 water=2 food=10 fuel=12 km=1620.0
+passive_insulation NIGHT 21 health=8 hull=36 water=0 food=9 fuel=12 km=1620.0
+powered_cooling NIGHT 1 health=60 hull=38 water=7 food=7 fuel=6 km=120.0
+powered_cooling NIGHT 2 health=60 hull=38 water=16 food=14 fuel=6 km=280.0
+powered_cooling NIGHT 3 health=60 hull=36 water=23 food=19 fuel=12 km=430.0
+powered_cooling NIGHT 4 health=60 hull=34 water=23 food=22 fuel=12 km=699.999999999999
+powered_cooling NIGHT 5 health=60 hull=32 water=23 food=23 fuel=12 km=939.999999999998
+powered_cooling NIGHT 6 health=60 hull=32 water=23 food=23 fuel=12 km=1260.0
+powered_cooling NIGHT 7 health=60 hull=32 water=23 food=23 fuel=11 km=1660.0
+powered_cooling NIGHT 8 health=60 hull=32 water=23 food=23 fuel=11 km=2060.0
+powered_cooling NIGHT 9 health=60 hull=32 water=23 food=23 fuel=12 km=2379.99999999999
+powered_cooling NIGHT 10 health=60 hull=32 water=23 food=23 fuel=11 km=2779.99999999998
+powered_cooling NIGHT 11 health=60 hull=32 water=23 food=23 fuel=12 km=3099.99999999998
+powered_cooling NIGHT 12 health=60 hull=32 water=23 food=23 fuel=11 km=3499.99999999997
+powered_cooling NIGHT 13 health=60 hull=32 water=23 food=23 fuel=12 km=3819.99999999996
+powered_cooling NIGHT 14 health=60 hull=32 water=23 food=23 fuel=11 km=4219.99999999996
+powered_cooling NIGHT 15 health=48 hull=39 water=22 food=23 fuel=8 km=4499.99999999997
+powered_cooling NIGHT 16 health=46 hull=36 water=21 food=23 fuel=8 km=4679.99999999998
+powered_cooling NIGHT 17 health=48 hull=36 water=20 food=22 fuel=7 km=4679.99999999998
+powered_cooling NIGHT 18 health=50 hull=36 water=19 food=21 fuel=6 km=4679.99999999998
+powered_cooling NIGHT 19 health=52 hull=36 water=18 food=20 fuel=5 km=4679.99999999998
+powered_cooling NIGHT 20 health=54 hull=36 water=17 food=19 fuel=4 km=4679.99999999998
+powered_cooling NIGHT 21 health=56 hull=36 water=16 food=18 fuel=3 km=4679.99999999998
+FULL CYCLE ACCEPTANCE failures=0

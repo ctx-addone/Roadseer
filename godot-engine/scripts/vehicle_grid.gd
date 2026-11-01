@@ -29,7 +29,9 @@ func cell_center(p:Vector2i)->Vector2:
  return origin+Vector2(p.x+0.5,p.y+0.5)*cell
 
 func item_at(p:Vector2i)->int:
- for item in model.items:
+ var ordered:Array=model.items.duplicate()
+ ordered.reverse()
+ for item in ordered:
   if item.floor==0 and Rect2i(item.pos,model.footprint(item)).has_point(p):return item.id
  return -1
 
@@ -96,8 +98,11 @@ func _draw():
    var occupant:String=model.seat_occupant(item.id)
    var mark:String="person" if not occupant.is_empty() else item.kind
    Symbols.paint(self,mark,Rect2(r.get_center().x-10,r.position.y+7,20,20),Color("e5c790") if not occupant.is_empty() else Color("a2b6ac"))
-   var caption:String=occupant if not occupant.is_empty() else "空座"
+   var caption:String=occupant if not occupant.is_empty() else "空座" if item.kind in ["seat","driver"] else model.CATALOG[item.kind].name
    draw_string(font,Vector2(r.position.x+4,r.end.y-7),caption,HORIZONTAL_ALIGNMENT_CENTER,r.size.x-8,12,Color("edf0e7"))
+   if item.has("seat_id") and item.seat_id>=0:draw_string(font,r.position+Vector2(3,12),"座",HORIZONTAL_ALIGNMENT_LEFT,-1,10,Color("ddc08c"))
+   if model.CATALOG[item.kind].has("max"):draw_string(font,r.position+Vector2(4,39),str(item.amount),HORIZONTAL_ALIGNMENT_LEFT,-1,12,Color("f4d99d"))
+   if model.CATALOG[item.kind].has("slots"):draw_string(font,r.position+Vector2(4,39),"%d/%d"%[model.slots_used(item.id),model.CATALOG[item.kind].slots],HORIZONTAL_ALIGNMENT_LEFT,-1,11,Color("f4d99d"))
    continue
   var wide:bool=model.footprint(item).y==1 and model.footprint(item).x>=2
   var icon_rect:Rect2=Rect2(r.position+Vector2(13,(r.size.y-30)/2),Vector2(30,30)) if wide else Rect2(Vector2(r.get_center().x-14,r.position.y+10),Vector2(28,28))
@@ -110,6 +115,21 @@ func _draw():
   if model.CATALOG[item.kind].has("max"):
    var value:String=str(item.amount)
    draw_string(font,r.end-Vector2(value.length()*9+8,7),value,HORIZONTAL_ALIGNMENT_LEFT,-1,13,Color("f4d99d"))
+  if model.CATALOG[item.kind].has("slots"):
+   draw_string(font,r.end-Vector2(65,7),"%d/%d槽"%[model.slots_used(item.id),model.CATALOG[item.kind].slots],HORIZONTAL_ALIGNMENT_LEFT,-1,12,Color("f4d99d"))
+  if model.has_method("ammo_sources") and item.kind in ["gun","cannon"]:
+   draw_string(font,r.end-Vector2(57,7),"弹匣%d"%item.get("loaded",0),HORIZONTAL_ALIGNMENT_LEFT,-1,11,Color("f4d99d"))
+ if model.has_method("ammo_sources") and selected_id>=0 and not moving and not dragging:
+  var selected:Dictionary=model.item_by_id(selected_id)
+  for weapon in model.items:
+   if weapon.floor!=0 or weapon.kind not in ["gun","cannon"]:continue
+   for source in model.ammo_sources(weapon):
+    var supplier:Dictionary=model.item_by_id(int(source.parent_id)) if source.floor==-2 else source
+    if weapon.id!=selected_id and supplier.id!=selected_id:continue
+    var a:Vector2=visual_rect(weapon.pos,model.footprint(weapon)).get_center()
+    var b:Vector2=visual_rect(supplier.pos,model.footprint(supplier)).get_center()
+    draw_line(a,b,Color("92d8b6"),3)
+    draw_circle(b,5,Color("92d8b6"))
  if (moving or dragging) and selected_id>=0 and hover.x>=0 and hover.y>=0:
   var candidate:Dictionary=model.item_by_id(selected_id).duplicate()
   if not candidate.is_empty():

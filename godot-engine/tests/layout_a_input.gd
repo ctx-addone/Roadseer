@@ -2,7 +2,11 @@ extends "res://tests/layout_a_drag.gd"
 func capture(name_text:String):
  await process_frame;await process_frame
  await RenderingServer.frame_post_draw
- root.get_texture().get_image().save_png("/tmp/roadseer-speed-"+name_text+".png")
+ var directory:String=OS.get_environment("ROADSEER_TEST_OUTPUT_DIR")
+ if directory.is_empty():directory=OS.get_user_data_dir().path_join("speed-travel-captures")
+ check(DirAccess.make_dir_recursive_absolute(directory)==OK,"screenshot directory available")
+ var result:int=root.get_texture().get_image().save_png(directory.path_join("roadseer-speed-"+name_text+".png"))
+ check(result==OK,"screenshot saved: "+name_text)
 func run():
  root.mode=Window.MODE_WINDOWED;root.size=Vector2i(1440,900)
  app=load("res://scenes/main.tscn").instantiate();root.add_child(app)

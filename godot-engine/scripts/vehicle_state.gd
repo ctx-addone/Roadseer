@@ -1,6 +1,6 @@
 extends RefCounted
 ## Disposable 21-day cycle prototype. Cargo and ingredients always occupy grid cells.
-const CATALOG = {
+const BASE_CATALOG = {
  "driver":{"name":"驾驶位","size":Vector2i.ONE,"color":"566d85","desc":"占1格，容纳1人。主角默认在此驾驶；移动座位时成员随座位移动。","fixed":true},
  "seat":{"name":"客座","size":Vector2i.ONE,"color":"43576d","desc":"占1格，容纳1人。开局为空座，不代表已有乘员。可搬移，本轮保留。","fixed":true},
  "bed":{"name":"单人床","size":Vector2i(1,2),"color":"8f8caa","desc":"占2格，可旋转。每床供1人睡眠；夜间自动安排。无热伤且水粮充足时，有床休息恢复2健康，无床不恢复。"},
@@ -25,7 +25,8 @@ const CATALOG = {
  "electronics":{"name":"元件","size":Vector2i(1,2),"color":"7f89b1","max":8,"desc":"发电机与制冷机的材料，每箱最多8。"},
  "repair":{"name":"修理包","size":Vector2i(1,2),"color":"ac6473","max":2,"desc":"停车时点击使用，消耗1份恢复10耐久。每箱最多2。"}
 }
-const RECIPES = {
+var CATALOG:Dictionary=BASE_CATALOG.duplicate(true)
+const BASE_RECIPES = {
  "bench":{"cost":{"scrap":2},"bench":false},
  "bed":{"cost":{"scrap":2,"cloth":2},"bench":false},
  "shade":{"cost":{"scrap":2,"cloth":4},"bench":true},
@@ -34,13 +35,15 @@ const RECIPES = {
  "armor":{"cost":{"scrap":3},"bench":true},
  "repair":{"cost":{"scrap":2,"cloth":1},"bench":true}
 }
+var RECIPES:Dictionary=BASE_RECIPES.duplicate(true)
 const HEAT = [3,3,4,5,5,4,3]
-const ROUTES = {
+const BASE_ROUTES = {
  "supply":{"name":"生活补给线","hint":"水6 / 粮4 / 油3；准备期安全，灾难期遭遇热兽。","loot":[["water",6],["food",4],["fuel",3]]},
  "salvage":{"name":"废车拆解线","hint":"金属4 / 布料3 / 弹药4；自动击退掠食兽。","loot":[["scrap",4],["cloth",3],["ammo",4]]},
  "tech":{"name":"电站遗址线","hint":"元件3 / 金属2 / 油4；遭遇守卫，首次学会发电机与制冷机图纸。","loot":[["electronics",3],["scrap",2],["fuel",4]]},
  "arms":{"name":"武装物资箱","hint":"弹药10 / 修理包1 / 布料2；装甲守卫，先战斗再开箱。","loot":[["ammo",10],["repair",1],["cloth",2]]}
 }
+var ROUTES:Dictionary=BASE_ROUTES.duplicate(true)
 var width:int=4
 var height:int=6
 var floor_index:int=0
@@ -52,7 +55,7 @@ const DAY_MINUTES:float=360.0
 const MINUTES_PER_SECOND:float=5.0
 const CACHE_SPACING:float=20.0
 const SITE_SPACING:float=60.0
-const CACHE_LOOT=[["water",2],["food",2],["fuel",1],["scrap",2],["ammo",3],["cloth",2]]
+var CACHE_LOOT:Array=[["water",2],["food",2],["fuel",1],["scrap",2],["ammo",3],["cloth",2]]
 const SITE_ORDER=["salvage","tech","supply","arms"]
 var minutes_left:float=DAY_MINUTES
 var engine_level:int=0
@@ -237,8 +240,8 @@ func discard_loose():
 
 func recipe_error(kind:String)->String:
  if not editable():return "当前无法制作"
- if minutes_left<60:return "今天不足1小时"
  if not RECIPES.has(kind):return "未知配方"
+ if minutes_left<float(RECIPES[kind].get("minutes",60)):return "今天剩余时间不足"
  if kind not in learned:return "尚未学会：探索电站遗址可保证获得图纸"
  if RECIPES[kind].bench and count_active("bench")==0:return "需要先把制作台装进车厢"
  for ingredient in RECIPES[kind].cost:
@@ -249,9 +252,9 @@ func craft(kind:String)->bool:
  var error:String=recipe_error(kind)
  if not error.is_empty():note(error);return false
  for ingredient in RECIPES[kind].cost:spend(ingredient,RECIPES[kind].cost[ingredient])
- minutes_left-=60
- add_item(kind)
- note("制作完成：%s，已放在地面。请装车才会生效；耗时1小时。"%CATALOG[kind].name)
+ minutes_left-=float(RECIPES[kind].get("minutes",60))
+ add_item(kind,int(RECIPES[kind].get("amount",1)))
+ note("制作完成：%s，已放在地面。请装车；耗时%d分钟。"%[CATALOG[kind].name,RECIPES[kind].get("minutes",60)])
  return true
 
 func upgrade()->bool:
@@ -519,6 +522,15 @@ func first_enemy()->int:
   if combat.enemies[i].hp>0:return i
  return -1
 
+func weapon_has_ammo(_weapon:Dictionary,cost:int)->bool:
+ return quantity("ammo")>=cost
+
+func weapon_ammo_cost(weapon:Dictionary)->int:
+ return 1 if weapon.kind=="gun" else 2
+
+func spend_weapon_ammo(_weapon:Dictionary,cost:int)->bool:
+ return spend("ammo",cost)
+
 func combat_step():
  if phase!="combat":return
  combat.tick+=1;effects=[]
@@ -528,10 +540,10 @@ func combat_step():
   if combat.tick%interval!=0:continue
   var index:int=first_enemy()
   if index<0:break
-  var ammo_cost:int=1 if weapon.kind=="gun" else 2
-  if not spend("ammo",ammo_cost):
+  var ammo_cost:int=weapon_ammo_cost(weapon)
+  if not spend_weapon_ammo(weapon,ammo_cost):
    effects.append({"type":"dry","id":weapon.id,"target":index})
-   if not combat.dry_warned:note("弹药不足：武器停火；每3拍应急撞击，车体也会受损。");combat.dry_warned=true
+   if not combat.dry_warned:note("可用弹药不足：武器停火；检查弹匣与补给。每3拍应急撞击，车体也会受损。");combat.dry_warned=true
    continue
   var target:Dictionary=combat.enemies[index]
   var raw_damage:int=6 if weapon.kind=="gun" else 16
@@ -543,7 +555,9 @@ func combat_step():
   note("%s → %s：%d伤害%s，弹药-%d"%[CATALOG[weapon.kind].name,target.name,damage,"（装甲减免%d）"%target.armor if weapon.kind=="gun" and target.armor>0 else "",ammo_cost])
   if target.hp==0:note("击破：%s"%target.name)
  if first_enemy()<0:end_battle();return
- var can_shoot:bool=(count_active("gun")>0 and quantity("ammo")>=1) or (count_active("cannon")>0 and quantity("ammo")>=2)
+ var can_shoot:bool=false
+ for weapon in items:
+  if weapon.floor==0 and weapon.kind in ["gun","cannon"] and weapon_has_ammo(weapon,weapon_ammo_cost(weapon)):can_shoot=true
  if not can_shoot and combat.tick%3==0:
   var target:Dictionary=combat.enemies[first_enemy()]
   target.hp=maxi(0,int(target.hp)-3);hull-=2;combat.damage+=2
